@@ -26,7 +26,7 @@ private:
 
   pcl::PassThrough<PointT> pass;
   pcl::VoxelGrid<PointT> vg;
-  CloudT::Ptr cloud_raw_ (new CloudT);
+  CloudT::Ptr cloud_raw_;
 
   ros::NodeHandle node_;
   tf::TransformListener listener_;

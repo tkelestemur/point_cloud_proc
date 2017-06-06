@@ -1,12 +1,11 @@
-#include <point_cloud_tools/point_cloud_tools.h>
+// #include <point_cloud_tools/point_cloud_tools.h>
 
 
 PointCloudTools::PointCloudTools()
 {
 
-  std::cout << "Constructer" << '\n';
-  std::string point_cloud2_topic = "/hsrb/head_rgbd_sensor/depth_registered/points";
-  // node_.getParam("/point_cloud2_topic", point_cloud2_topic);
+  std::string point_cloud2_topic = "/camera/point_cloud";
+  node_.getParam("/point_cloud2_topic", point_cloud2_topic);
   point_cloud_sub_ =  node_.subscribe<sensor_msgs::PointCloud2>(point_cloud2_topic,
                                                                 10,
                                                                 &PointCloudTools::pointCloudCb,
@@ -32,5 +31,4 @@ return true;
 
 void PointCloudTools::pointCloudCb(const sensor_msgs::PointCloud2 point_cloud){
   raw_cloud_msg_ = point_cloud;
-  std::cout << "Got a point cloud msg!" << '\n';
 }
