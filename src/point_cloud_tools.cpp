@@ -2,6 +2,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <std_srvs/Empty.h>
 
+#include <gpd/CloudIndexed.h>
+
 #include <pcl/point_types.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
@@ -19,17 +21,19 @@ public:
     leaf_size_ = 0.03;
     pass_limits_ = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     point_cloud_topic_ = "/camera/point_cloud";
-
+    
     nh_.getParam("/point_cloud_topic", point_cloud_topic_);
-    point_cloud_sub_ = nh_.subscribe(point_cloud_topic_, 10, pointCloudCb);
+    point_cloud_sub_ = nh_.subscribe(point_cloud_topic_, 10, &PointCloudTools::pointCloudCb);
     table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/object_seg/table_cloud", 10);
     object_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/object_seg/object_cloud", 10);
+    gpd_cloud_pub_ = node.advertise<gpd::CloudIndexed>("/object_seg/indexed_cloud", 10);
+    object_cluster_srv_ = node.advertiseService("object_seg/cluster_objects", objectClusterService);
 
 
   }
 
-  void pointCloudCb(/* arguments */) {
-    /* code */
+  void pointCloudCb(const sensor_msgs::PointCloud2 point_cloud) {
+    
   }
 
   void filterPointCloud(bool use_passthrough, bool use_voxel){
@@ -127,9 +131,10 @@ void createGPDMsg() {
   // gpd_cloud_pub.publish(gpd_cloud);
 }
 
-// void pointCloudCb(const sensor_msgs::PointCloud2 point_cloud) {
-//   point_cloud_ = point_cloud;
-// }
+bool objectClusterService(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res){
+
+
+}
 
 private:
   pcl::PassThrough<PointT> pass_;
@@ -153,12 +158,14 @@ private:
 
   ros::NodeHandle nh_;
   ros::Subscriber point_cloud_sub_;
-  ros::Publisher table_cloud_pub_, object_cloud_pub_;
+  ros::Publisher table_cloud_pub_, object_cloud_pub_, gpd_cloud_pub_;
+  ros::ServiceServer object_cluster_srv_;
+  
 
 };
 
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "object_segmentation");
+  ros::init(argc, argv, "object_seg");
   ros::NodeHandle n("~");
   PointCloudTools pc_tools(n);
 
