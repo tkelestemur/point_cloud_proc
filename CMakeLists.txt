@@ -9,10 +9,10 @@ project(point_cloud_tools)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  sensor_msgs
   pcl_ros
   roscpp
   rospy
-  sensor_msgs
   tf
 )
 
@@ -37,8 +37,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
- INCLUDE_DIRS include
- LIBRARIES point_cloud_tools
+ # INCLUDE_DIRS include
+ # LIBRARIES point_cloud_tools
 #  CATKIN_DEPENDS geometry_msgs pcl_ros roscpp rospy sensor_msgs tf
 # DEPENDS PCL
 )
@@ -46,37 +46,37 @@ catkin_package(
 ###########
 ## Build ##
 ###########
-include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "-std=c++11")
-elseif(COMPILER_SUPPORTS_CXX0X)
-    set(CMAKE_CXX_FLAGS "-std=c++0x")
-else()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler. Suggested solution: update the pkg build-essential ")
-endif()
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
+# include(CheckCXXCompilerFlag)
+# CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+# CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+# if(COMPILER_SUPPORTS_CXX11)
+#     set(CMAKE_CXX_FLAGS "-std=c++11")
+# elseif(COMPILER_SUPPORTS_CXX0X)
+#     set(CMAKE_CXX_FLAGS "-std=c++0x")
+# else()
+#     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler. Suggested solution: update the pkg build-essential ")
+# endif()
+# ## Specify additional locations of header files
+# ## Your package locations should be listed before other locations
 include_directories(
-	include
-	SYSTEM
+	# include
+	# SYSTEM
  	${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}
-  src/point_cloud_tools.cpp
-)
+# add_library(${PROJECT_NAME}
+#   src/point_cloud_tools.cpp
+# )
+#
+# target_link_libraries(${PROJECT_NAME}
+#   # ${Boost_LIBRARIES}
+#   ${catkin_LIBRARIES}
+#   ${PCL_LIBRARIES}
+# )
 
-target_link_libraries(${PROJECT_NAME}
-  # ${Boost_LIBRARIES}
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-)
-
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -86,8 +86,8 @@ add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(cluster_objects nodes/cluster_objects.cpp)
-
+add_executable(point_cloud_tools src/point_cloud_tools.cpp)
+target_link_libraries(point_cloud_tools ${catkin_LIBRARIES})
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -99,7 +99,3 @@ add_executable(cluster_objects nodes/cluster_objects.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(cluster_objects
-	point_cloud_tools
-	${catkin_LIBRARIES}
-)
