@@ -1,6 +1,8 @@
-point_cloud_topic: "/camera/depth/points"
+point_cloud_topic: "/hsrb/head_rgbd_sensor/depth_registered/rectified_points"
 filters:
-  use_passthrough: 1
-  pass_limits: [-0.2, 0.9, 1.0, 1.0, 0.0, 1.5] # passthrough filter limits: [x_min, x_max, y_min, y_max, z_min, z_max]
-  use_voxel: 0 # 0: don't use, 1: use
+  use_passthrough: 1 # 0: don't use, 1: use
+  pass_limits: [0.0, 3.0, -2.0, 2.0, 0.30, 1.5] # passthrough filter limits: [x_min, x_max, y_min, y_max, z_min, z_max]
+  use_voxel: 1 # 0: don't use, 1: use
   leaf_size: 0.01 # voxelgrid filter leaf size
+segmentation:
+  prism_limits: [-0.25, -0.02]

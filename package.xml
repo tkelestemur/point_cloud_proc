@@ -1,13 +1,11 @@
 <?xml version="1.0"?>
 <package>
-  <name>point_cloud_tools</name>
+  <name>point_cloud_proc</name>
   <version>0.0.0</version>
   <description>The point_cloud_tools package</description>
 
-  <!-- One maintainer tag required, multiple allowed, one person per tag -->
-  <!-- Example:  -->
-  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
-  <maintainer email="tarik@todo.todo">tarik</maintainer>
+
+  <maintainer email="kelestemur.t@husky.neu.edu">Tarik Kelestemur</maintainer>
 
 
   <!-- One license tag required, multiple allowed, one license per tag -->
