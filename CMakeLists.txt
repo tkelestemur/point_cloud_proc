@@ -10,6 +10,7 @@ project(point_cloud_proc)
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   sensor_msgs
+  object_msgs
   pcl_ros
   roscpp
   rospy
