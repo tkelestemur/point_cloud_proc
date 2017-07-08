@@ -3,6 +3,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <std_srvs/Empty.h>
 #include <tf/transform_listener.h>
+#include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <gpd/CloudIndexed.h>
 #include <shape_msgs/Plane.h>
@@ -65,8 +66,8 @@ class PointCloudProc{
       point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
       table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
       object_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);
-      plane_object_pub_ = nh_.advertise<object_msgs::PlaneObjects>("plane_objects", 10);
       gpd_cloud_pub_ = nh_.advertise<gpd::CloudIndexed>("indexed_cloud", 10);
+      plane_polygon_pub_ = nh_.advertise<geometry_msgs::PolygonStamped>("plane_polygon", 10);
       // object_cluster_srv_ = nh_.advertiseService ("extract_objects", &PointCloudProc::objectClusterServiceCb, this);
       segment_multiple_plane_srv_ = nh_.advertiseService ("segment_multi_plane", &PointCloudProc::segmentMultiplePlaneServiceCb, this);
       segment_single_plane_srv_ = nh_.advertiseService ("segment_single_plane", &PointCloudProc::segmentSinglePlaneServiceCb, this);
@@ -176,7 +177,6 @@ class PointCloudProc{
 
 
       // Construct plane object msg
-      object_msgs::PlaneObjects plane_object_msgs;
       object_msgs::PlaneObject plane_object_msg;
 
       pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
@@ -188,12 +188,12 @@ class PointCloudProc{
 
       // Get plane polygon
       for (int i = 0; i < cloud_hull->points.size (); i++) {
-        geometry_msgs::Point pt;
-        pt.x = cloud_hull->points[i].x;
-        pt.y = cloud_hull->points[i].y;
-        pt.z = cloud_hull->points[i].z;
+        geometry_msgs::Point32 p;
+        p.x = cloud_hull->points[i].x;
+        p.y = cloud_hull->points[i].y;
+        p.z = cloud_hull->points[i].z;
 
-        plane_object_msg.polygon.push_back(pt);
+        plane_object_msg.polygon.push_back(p);
       }
 
       // Get plane coefficients
@@ -203,6 +203,7 @@ class PointCloudProc{
       plane_object_msg.coef[3] = coefficients->values[3];
 
       plane_object_msg.size.data = cloud_plane->points.size();
+      plane_object_msg.is_horizontal = true;
       res.success = true;
       res.plane_object = plane_object_msg;
 
@@ -230,9 +231,9 @@ class PointCloudProc{
       ne.compute (*normal_cloud);
 
       pcl::OrganizedMultiPlaneSegmentation<PointT, pcl::Normal, pcl::Label> mps;
-      mps.setMinInliers (700);
-      mps.setAngularThreshold ((M_PI/180) * 3.0); //3 degrees
-      mps.setDistanceThreshold (0.02); //2cm
+      mps.setMinInliers (500);
+      mps.setAngularThreshold ((M_PI/180) * 3.0); // 2 degrees
+      mps.setDistanceThreshold (0.04); // 5 cm
       mps.setInputNormals (normal_cloud);
       mps.setInputCloud (cloud_transformed_);
       mps.segmentAndRefine (regions, plane_coefficients, plane_indices, labels, label_indices, boundary_indices);
@@ -260,6 +261,13 @@ class PointCloudProc{
         plane_object_msg.coef[2] = model[2];
         plane_object_msg.coef[3] = model[3];
 
+        // Check if the plane is horizontal
+        Eigen::Vector3f normal(model[0], model[1], model[2]);
+        float angle = acos(Eigen::Vector3f::UnitZ().dot(normal));
+        if (angle < 0.15 || (M_PI - angle) < 0.15) {
+          plane_object_msg.is_horizontal = true;
+        } else plane_object_msg.is_horizontal = false;
+
         // Get plane center
         Eigen::Vector3f centroid = regions[i].getCentroid();
         plane_object_msg.center.x = centroid[0];
@@ -276,20 +284,19 @@ class PointCloudProc{
         // std::cout << "number of points in label_indices: " << label_indices[i].indices.size() << '\n';
 
         for (int j = 0; j < contour->points.size (); j++) { // TODO: Find a function that does this job.
-          geometry_msgs::Point pt;
-          pt.x = contour->points[j].x;
-          pt.y = contour->points[j].y;
-          pt.z = contour->points[j].z;
+          geometry_msgs::Point32 p;
+          p.x = contour->points[j].x;
+          p.y = contour->points[j].y;
+          p.z = contour->points[j].z;
 
-          plane_object_msg.polygon.push_back(pt);
+          plane_object_msg.polygon.push_back(p);
         }
+
 
         // Get point cloud size
         plane_object_msg.size.data = plane_indices[i].indices.size();
 
-
         plane_object_msgs.objects.push_back(plane_object_msg);
-        plane_object_pub_.publish(plane_object_msgs);
 
       }
       res.plane_objects = plane_object_msgs;
@@ -441,8 +448,7 @@ class PointCloudProc{
 
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
-    ros::Publisher table_cloud_pub_, object_cloud_pub_, gpd_cloud_pub_;
-    ros::Publisher plane_object_pub_;
+    ros::Publisher table_cloud_pub_, object_cloud_pub_, gpd_cloud_pub_, plane_polygon_pub_;
     ros::ServiceServer object_cluster_srv_, create_gpd_msg_srv_;
     ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
     tf::TransformListener listener_;
