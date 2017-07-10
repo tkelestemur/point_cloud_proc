@@ -148,9 +148,8 @@ class PointCloudProc{
         ROS_INFO("No plane found!");
         res.success = false;
         return;
-      }
+      } else ROS_INFO("Single plane is segmented!");
 
-      ROS_INFO("Single plane is segmented!");
       ROS_INFO_STREAM("Coefficients: " << coefficients->values[0] << " "
                                        << coefficients->values[1] << " "
                                        << coefficients->values[2] << " "
@@ -212,98 +211,201 @@ class PointCloudProc{
 
 
     void segmentMultiplePlane(object_msgs::MultiPlaneSegmentation::Response &res) {
+      //   // Construct plane object msg
+        object_msgs::PlaneObjects plane_object_msgs;
+        object_msgs::PlaneObject plane_object_msg;
+        pcl::ExtractIndices<PointT> extract;
+        int MIN_PLANE_SIZE = 200;
+        int no_planes = 0;
+        CloudT::Ptr cloud_plane (new CloudT);
+        CloudT::Ptr cloud_hull (new CloudT);
 
-      pcl::PointCloud<pcl::Normal>::Ptr normal_cloud (new pcl::PointCloud<pcl::Normal>);
-      std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT> > > regions;
-      std::vector<pcl::ModelCoefficients> plane_coefficients;
-      std::vector<pcl::PointIndices> plane_indices;
-      std::vector<pcl::PointIndices> label_indices;
-      std::vector<pcl::PointIndices> boundary_indices;
-      std::vector<Eigen::Vector4f, Eigen::aligned_allocator< Eigen::Vector4f > > centroids;
-      std::vector<Eigen::Matrix3f, Eigen::aligned_allocator< Eigen::Matrix3f > > covariances;
-      pcl::PointCloud<pcl::Label>::Ptr labels (new pcl::PointCloud<pcl::Label>);
 
-      pcl::IntegralImageNormalEstimation<PointT, pcl::Normal> ne;
-      ne.setNormalEstimationMethod (ne.COVARIANCE_MATRIX);
-      ne.setMaxDepthChangeFactor (0.03f);
-      ne.setNormalSmoothingSize (20.0f);
-      ne.setInputCloud (cloud_transformed_);
-      ne.compute (*normal_cloud);
+        Eigen::Vector3f axis = Eigen::Vector3f(0.0,0.0,1.0); //z axis
+        seg_.setOptimizeCoefficients (true);
+        seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
+        seg_.setMethodType (pcl::SAC_RANSAC);
+        seg_.setAxis(axis);
+        seg_.setEpsAngle(10.0f * (M_PI/180.0f));
+        seg_.setDistanceThreshold (0.01);
 
-      pcl::OrganizedMultiPlaneSegmentation<PointT, pcl::Normal, pcl::Label> mps;
-      mps.setMinInliers (500);
-      mps.setAngularThreshold ((M_PI/180) * 3.0); // 2 degrees
-      mps.setDistanceThreshold (0.04); // 5 cm
-      mps.setInputNormals (normal_cloud);
-      mps.setInputCloud (cloud_transformed_);
-      mps.segmentAndRefine (regions, plane_coefficients, plane_indices, labels, label_indices, boundary_indices);
 
-      if (regions.size() != 0) {
-        ROS_INFO_STREAM("Multiple planses segmented! # of planes: " << regions.size());
-      } else {
-        ROS_INFO("No plane found!");
-        res.success = false;
-        return;
-      }
 
-      // Construct plane object msg
-      object_msgs::PlaneObjects plane_object_msgs;
-      object_msgs::PlaneObject plane_object_msg;
+        while(true) {
 
-      for (int i = 0; i < regions.size (); i++){
+          pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+          pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
 
-        pcl_conversions::fromPCL(cloud_transformed_->header, plane_object_msg.header);
+          seg_.setInputCloud (cloud_filtered_);
+          seg_.segment (*inliers, *coefficients);
 
-        // Get plane coefficients
-        Eigen::Vector4f model = regions[i].getCoefficients();
-        plane_object_msg.coef[0] = model[0];
-        plane_object_msg.coef[1] = model[1];
-        plane_object_msg.coef[2] = model[2];
-        plane_object_msg.coef[3] = model[3];
+          if (inliers->indices.size() == 0 and no_planes == 0) {
+            ROS_INFO("No plane found!");
+            res.success = false;
+            break;
+          }
+          else if (inliers->indices.size() < MIN_PLANE_SIZE) {
+            break;
+          }
+          else {
+            ROS_INFO_STREAM(no_planes << ". plane segmented!");
+            ROS_INFO_STREAM("Plane size:" << inliers->indices.size());
+            no_planes++;
+          }
 
-        // Check if the plane is horizontal
-        Eigen::Vector3f normal(model[0], model[1], model[2]);
-        float angle = acos(Eigen::Vector3f::UnitZ().dot(normal));
-        if (angle < 0.15 || (M_PI - angle) < 0.15) {
+          extract.setInputCloud (cloud_filtered_);
+          extract.setNegative(false);
+          extract.setIndices (inliers);
+          extract.filter (*cloud_plane);
+
+          if (debug_) {
+            table_cloud_pub_.publish(cloud_plane);
+          }
+
+          chull_.setInputCloud (cloud_plane);
+          chull_.setDimension(2);
+          chull_.reconstruct (*cloud_hull);
+
+          Eigen::Vector4f center;
+          pcl::compute3DCentroid(*cloud_hull, center); // TODO: Compare with cloud_plane center
+
+          // Construct plane object msg
+
+          pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
+
+          // Get plane center
+          plane_object_msg.center.x = center[0];
+          plane_object_msg.center.y = center[1];
+          plane_object_msg.center.z = center[2];
+
+          // Get plane polygon
+          for (int i = 0; i < cloud_hull->points.size (); i++) {
+            geometry_msgs::Point32 p;
+            p.x = cloud_hull->points[i].x;
+            p.y = cloud_hull->points[i].y;
+            p.z = cloud_hull->points[i].z;
+
+            plane_object_msg.polygon.push_back(p);
+          }
+
+          // Get plane coefficients
+          plane_object_msg.coef[0] = coefficients->values[0];
+          plane_object_msg.coef[1] = coefficients->values[1];
+          plane_object_msg.coef[2] = coefficients->values[2];
+          plane_object_msg.coef[3] = coefficients->values[3];
+
+          plane_object_msg.size.data = cloud_plane->points.size();
           plane_object_msg.is_horizontal = true;
-        } else plane_object_msg.is_horizontal = false;
+          res.success = true;
 
-        // Get plane center
-        Eigen::Vector3f centroid = regions[i].getCentroid();
-        plane_object_msg.center.x = centroid[0];
-        plane_object_msg.center.y = centroid[1];
-        plane_object_msg.center.z = centroid[2];
+          plane_object_msgs.objects.push_back(plane_object_msg);
+          extract.setNegative(true);
+          extract.filter(*cloud_filtered_);
 
-        // Get plane polygon
-        pcl::PointCloud<PointT>::Ptr contour (new pcl::PointCloud<PointT>);
-        contour->points = regions[i].getContour();
 
-        // std::cout << "number of points in contour: " << contour->points.size() << '\n';
-        // std::cout << "number of points in plane_indices: " << plane_indices[i].indices.size() << '\n';
-        // std::cout << "number of points in boundary_indices: " << boundary_indices[i].indices.size() << '\n';
-        // std::cout << "number of points in label_indices: " << label_indices[i].indices.size() << '\n';
-
-        for (int j = 0; j < contour->points.size (); j++) { // TODO: Find a function that does this job.
-          geometry_msgs::Point32 p;
-          p.x = contour->points[j].x;
-          p.y = contour->points[j].y;
-          p.z = contour->points[j].z;
-
-          plane_object_msg.polygon.push_back(p);
         }
 
+        res.plane_objects = plane_object_msgs;
 
-        // Get point cloud size
-        plane_object_msg.size.data = plane_indices[i].indices.size();
 
-        plane_object_msgs.objects.push_back(plane_object_msg);
-
-      }
-      res.plane_objects = plane_object_msgs;
-      res.success = true;
 
 
     }
+
+
+    // void segmentMultiplePlane(object_msgs::MultiPlaneSegmentation::Response &res) {
+    //
+    //   pcl::PointCloud<pcl::Normal>::Ptr normal_cloud (new pcl::PointCloud<pcl::Normal>);
+    //   std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT> > > regions;
+    //   std::vector<pcl::ModelCoefficients> plane_coefficients;
+    //   std::vector<pcl::PointIndices> plane_indices;
+    //   std::vector<pcl::PointIndices> label_indices;
+    //   std::vector<pcl::PointIndices> boundary_indices;
+    //   std::vector<Eigen::Vector4f, Eigen::aligned_allocator< Eigen::Vector4f > > centroids;
+    //   std::vector<Eigen::Matrix3f, Eigen::aligned_allocator< Eigen::Matrix3f > > covariances;
+    //   pcl::PointCloud<pcl::Label>::Ptr labels (new pcl::PointCloud<pcl::Label>);
+    //
+    //   pcl::IntegralImageNormalEstimation<PointT, pcl::Normal> ne;
+    //   ne.setNormalEstimationMethod (ne.COVARIANCE_MATRIX);
+    //   ne.setMaxDepthChangeFactor (0.03f);
+    //   ne.setNormalSmoothingSize (20.0f);
+    //   ne.setInputCloud (cloud_transformed_);
+    //   ne.compute (*normal_cloud);
+    //
+    //   pcl::OrganizedMultiPlaneSegmentation<PointT, pcl::Normal, pcl::Label> mps;
+    //   mps.setMinInliers (500);
+    //   mps.setAngularThreshold ((M_PI/180) * 3.0); // 2 degrees
+    //   mps.setDistanceThreshold (0.04); // 5 cm
+    //   mps.setInputNormals (normal_cloud);
+    //   mps.setInputCloud (cloud_transformed_);
+    //   mps.segmentAndRefine (regions, plane_coefficients, plane_indices, labels, label_indices, boundary_indices);
+    //
+    //   if (regions.size() != 0) {
+    //     ROS_INFO_STREAM("Multiple planses segmented! # of planes: " << regions.size());
+    //   } else {
+    //     ROS_INFO("No plane found!");
+    //     res.success = false;
+    //     return;
+    //   }
+    //
+    //   // Construct plane object msg
+    //   object_msgs::PlaneObjects plane_object_msgs;
+    //   object_msgs::PlaneObject plane_object_msg;
+    //
+    //   for (int i = 0; i < regions.size (); i++){
+    //
+    //     pcl_conversions::fromPCL(cloud_transformed_->header, plane_object_msg.header);
+    //
+    //     // Get plane coefficients
+    //     Eigen::Vector4f model = regions[i].getCoefficients();
+    //     plane_object_msg.coef[0] = model[0];
+    //     plane_object_msg.coef[1] = model[1];
+    //     plane_object_msg.coef[2] = model[2];
+    //     plane_object_msg.coef[3] = model[3];
+    //
+    //     // Check if the plane is horizontal
+    //     Eigen::Vector3f normal(model[0], model[1], model[2]);
+    //     float angle = acos(Eigen::Vector3f::UnitZ().dot(normal));
+    //     if (angle < 0.15 || (M_PI - angle) < 0.15) {
+    //       plane_object_msg.is_horizontal = true;
+    //     } else plane_object_msg.is_horizontal = false;
+    //
+    //     // Get plane center
+    //     Eigen::Vector3f centroid = regions[i].getCentroid();
+    //     plane_object_msg.center.x = centroid[0];
+    //     plane_object_msg.center.y = centroid[1];
+    //     plane_object_msg.center.z = centroid[2];
+    //
+    //     // Get plane polygon
+    //     pcl::PointCloud<PointT>::Ptr contour (new pcl::PointCloud<PointT>);
+    //     contour->points = regions[i].getContour();
+    //
+    //     // std::cout << "number of points in contour: " << contour->points.size() << '\n';
+    //     // std::cout << "number of points in plane_indices: " << plane_indices[i].indices.size() << '\n';
+    //     // std::cout << "number of points in boundary_indices: " << boundary_indices[i].indices.size() << '\n';
+    //     // std::cout << "number of points in label_indices: " << label_indices[i].indices.size() << '\n';
+    //
+    //     for (int j = 0; j < contour->points.size (); j++) { // TODO: Find a function that does this job.
+    //       geometry_msgs::Point32 p;
+    //       p.x = contour->points[j].x;
+    //       p.y = contour->points[j].y;
+    //       p.z = contour->points[j].z;
+    //
+    //       plane_object_msg.polygon.push_back(p);
+    //     }
+    //
+    //
+    //     // Get point cloud size
+    //     plane_object_msg.size.data = plane_indices[i].indices.size();
+    //
+    //     plane_object_msgs.objects.push_back(plane_object_msg);
+    //
+    //   }
+    //   res.plane_objects = plane_object_msgs;
+    //   res.success = true;
+    //
+    //
+    // }
 
     void extractObjects() {
 
@@ -395,11 +497,29 @@ class PointCloudProc{
 
   }
 
+  // bool segmentMultiplePlaneServiceCb(object_msgs::MultiPlaneSegmentation::Request &req,
+  //                                    object_msgs::MultiPlaneSegmentation::Response &res){
+  //   if (!PointCloudProc::transformPointCloud()){
+  //     ROS_INFO("Couldn't transform point cloud!");
+  //     return false;
+  //   }
+  //
+  //   PointCloudProc::segmentMultiplePlane(res);
+  //   return true;
+  //
+  // }
+
   bool segmentMultiplePlaneServiceCb(object_msgs::MultiPlaneSegmentation::Request &req,
                                      object_msgs::MultiPlaneSegmentation::Response &res){
     if (!PointCloudProc::transformPointCloud()){
       ROS_INFO("Couldn't transform point cloud!");
       return false;
+    }
+
+    if (!PointCloudProc::filterPointCloud(true)){
+      ROS_INFO("Couldn't filter point cloud!");
+      res.success = false;
+      return true;
     }
 
     PointCloudProc::segmentMultiplePlane(res);
