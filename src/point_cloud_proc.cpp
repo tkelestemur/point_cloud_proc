@@ -214,8 +214,7 @@ class PointCloudProc{
       //   // Construct plane object msg
         object_msgs::PlaneObjects plane_object_msgs;
         object_msgs::PlaneObject plane_object_msg;
-        pcl::ExtractIndices<PointT> extract;
-        int MIN_PLANE_SIZE = 200;
+        int MIN_PLANE_SIZE = 1000;
         int no_planes = 0;
         CloudT::Ptr cloud_plane (new CloudT);
         CloudT::Ptr cloud_hull (new CloudT);
@@ -226,7 +225,7 @@ class PointCloudProc{
         seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
         seg_.setMethodType (pcl::SAC_RANSAC);
         seg_.setAxis(axis);
-        seg_.setEpsAngle(10.0f * (M_PI/180.0f));
+        seg_.setEpsAngle(15.0f * (M_PI/180.0f));
         seg_.setDistanceThreshold (0.01);
 
 
@@ -249,14 +248,14 @@ class PointCloudProc{
           }
           else {
             ROS_INFO_STREAM(no_planes << ". plane segmented!");
-            ROS_INFO_STREAM("Plane size:" << inliers->indices.size());
+            ROS_INFO_STREAM("Plane size : " << inliers->indices.size());
             no_planes++;
           }
 
-          extract.setInputCloud (cloud_filtered_);
-          extract.setNegative(false);
-          extract.setIndices (inliers);
-          extract.filter (*cloud_plane);
+          extract_.setInputCloud (cloud_filtered_);
+          extract_.setNegative(false);
+          extract_.setIndices (inliers);
+          extract_.filter (*cloud_plane);
 
           if (debug_) {
             table_cloud_pub_.publish(cloud_plane);
@@ -299,8 +298,8 @@ class PointCloudProc{
           res.success = true;
 
           plane_object_msgs.objects.push_back(plane_object_msg);
-          extract.setNegative(true);
-          extract.filter(*cloud_filtered_);
+          extract_.setNegative(true);
+          extract_.filter(*cloud_filtered_);
 
 
         }
