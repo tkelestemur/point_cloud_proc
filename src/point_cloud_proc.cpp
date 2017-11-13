@@ -5,12 +5,13 @@
 #include <tf/transform_listener.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
-#include <gpd/CloudIndexed.h>
+// #include <gpd/CloudIndexed.h>
 #include <shape_msgs/Plane.h>
 #include <shape_msgs/Mesh.h>
-#include <object_msgs/PlaneObjects.h>
-#include <object_msgs/SinglePlaneSegmentation.h>
-#include <object_msgs/MultiPlaneSegmentation.h>
+#include <point_cloud_proc/PlaneObjects.h>
+#include <point_cloud_proc/SinglePlaneSegmentation.h>
+#include <point_cloud_proc/MultiPlaneSegmentation.h>
+#include <point_cloud_proc/TabletopExtraction.h>
 #include <geometric_shapes/body_operations.h>
 #include <geometric_shapes/shape_operations.h>
 
@@ -44,7 +45,7 @@ class PointCloudProc{
   typedef pcl::PointCloud<PointT> CloudT;
 
   public:
-    PointCloudProc(ros::NodeHandle n) : nh_(n), debug_(true) {
+    PointCloudProc(ros::NodeHandle n) : nh_(n), debug_(false) {
 
       leaf_size_ = 0.01;
       pass_limits_.push_back(0.0);
@@ -66,12 +67,13 @@ class PointCloudProc{
       point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
       table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
       object_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);
-      gpd_cloud_pub_ = nh_.advertise<gpd::CloudIndexed>("indexed_cloud", 10);
+      // gpd_cloud_pub_ = nh_.advertise<gpd::CloudIndexed>("indexed_cloud", 10);
       plane_polygon_pub_ = nh_.advertise<geometry_msgs::PolygonStamped>("plane_polygon", 10);
       // object_cluster_srv_ = nh_.advertiseService ("extract_objects", &PointCloudProc::objectClusterServiceCb, this);
       segment_multiple_plane_srv_ = nh_.advertiseService ("segment_multi_plane", &PointCloudProc::segmentMultiplePlaneServiceCb, this);
       segment_single_plane_srv_ = nh_.advertiseService ("segment_single_plane", &PointCloudProc::segmentSinglePlaneServiceCb, this);
-      create_gpd_msg_srv_ = nh_.advertiseService ("create_gpd_msg", &PointCloudProc::createGPDMsgServiceCb, this);
+      extract_tabletop_srv_ = nh_.advertiseService ("extract_tabletop", &PointCloudProc::extractTabletopServiceCb, this);
+      // create_gpd_msg_srv_ = nh_.advertiseService ("create_gpd_msg", &PointCloudProc::createGPDMsgServiceCb, this);
 
     }
 
@@ -126,7 +128,7 @@ class PointCloudProc{
       return true;
     }
 
-    void segmentSinglePlane(object_msgs::SinglePlaneSegmentation::Response &res){
+    void segmentSinglePlane(bool create_srv_res){
 
       CloudT::Ptr cloud_plane (new CloudT);
       CloudT::Ptr cloud_hull (new CloudT);
@@ -144,9 +146,9 @@ class PointCloudProc{
       seg_.setInputCloud (cloud_filtered_);
       seg_.segment (*inliers, *coefficients);
 
-      if (inliers->indices.size() == 0) {
+      if (inliers->indices.size() == 0) { //TODO: return false if this doesn't hold
         ROS_INFO("No plane found!");
-        res.success = false;
+        // res.success = false;
         return;
       } else ROS_INFO("Single plane is segmented!");
 
@@ -175,45 +177,49 @@ class PointCloudProc{
       pcl::compute3DCentroid(*cloud_plane, center);
 
 
-      // Construct plane object msg
-      object_msgs::PlaneObject plane_object_msg;
+      if (create_srv_res) {
+        // Construct plane object msg
+        point_cloud_proc::PlaneObject plane_object_msg;
 
-      pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
+        pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
 
-      // Get plane center
-      plane_object_msg.center.x = center[0];
-      plane_object_msg.center.y = center[1];
-      plane_object_msg.center.z = center[2];
+        // Get plane center
+        plane_object_msg.center.x = center[0];
+        plane_object_msg.center.y = center[1];
+        plane_object_msg.center.z = center[2];
 
-      // Get plane polygon
-      for (int i = 0; i < cloud_hull->points.size (); i++) {
-        geometry_msgs::Point32 p;
-        p.x = cloud_hull->points[i].x;
-        p.y = cloud_hull->points[i].y;
-        p.z = cloud_hull->points[i].z;
+        // Get plane polygon
+        for (int i = 0; i < cloud_hull->points.size (); i++) {
+          geometry_msgs::Point32 p;
+          p.x = cloud_hull->points[i].x;
+          p.y = cloud_hull->points[i].y;
+          p.z = cloud_hull->points[i].z;
 
-        plane_object_msg.polygon.push_back(p);
+          plane_object_msg.polygon.push_back(p);
+        }
+
+        // Get plane coefficients
+        plane_object_msg.coef[0] = coefficients->values[0];
+        plane_object_msg.coef[1] = coefficients->values[1];
+        plane_object_msg.coef[2] = coefficients->values[2];
+        plane_object_msg.coef[3] = coefficients->values[3];
+
+        plane_object_msg.size.data = cloud_plane->points.size();
+        plane_object_msg.is_horizontal = true;
+        plane_object_ = plane_object_msg;
+        // res.success = true;
+        // res.plane_object = plane_object_msg;
       }
 
-      // Get plane coefficients
-      plane_object_msg.coef[0] = coefficients->values[0];
-      plane_object_msg.coef[1] = coefficients->values[1];
-      plane_object_msg.coef[2] = coefficients->values[2];
-      plane_object_msg.coef[3] = coefficients->values[3];
-
-      plane_object_msg.size.data = cloud_plane->points.size();
-      plane_object_msg.is_horizontal = true;
-      res.success = true;
-      res.plane_object = plane_object_msg;
 
 
     }
 
 
-    void segmentMultiplePlane(object_msgs::MultiPlaneSegmentation::Response &res) {
+    void segmentMultiplePlane(bool create_srv_res) {
       //   // Construct plane object msg
-        object_msgs::PlaneObjects plane_object_msgs;
-        object_msgs::PlaneObject plane_object_msg;
+        point_cloud_proc::PlaneObjects plane_object_msgs;
+        point_cloud_proc::PlaneObject plane_object_msg;
         int MIN_PLANE_SIZE = 1000;
         int no_planes = 0;
         CloudT::Ptr cloud_plane (new CloudT);
@@ -239,8 +245,7 @@ class PointCloudProc{
           seg_.segment (*inliers, *coefficients);
 
           if (inliers->indices.size() == 0 and no_planes == 0) {
-            ROS_INFO("No plane found!");
-            res.success = false;
+            ROS_INFO("No plane found!"); // TODO: return false;
             break;
           }
           else if (inliers->indices.size() < MIN_PLANE_SIZE) {
@@ -268,47 +273,45 @@ class PointCloudProc{
           Eigen::Vector4f center;
           pcl::compute3DCentroid(*cloud_hull, center); // TODO: Compare with cloud_plane center
 
-          // Construct plane object msg
 
-          pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
+          if (create_srv_res) {
+            // Construct plane object msg
+            pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
 
-          // Get plane center
-          plane_object_msg.center.x = center[0];
-          plane_object_msg.center.y = center[1];
-          plane_object_msg.center.z = center[2];
+            // Get plane center
+            plane_object_msg.center.x = center[0];
+            plane_object_msg.center.y = center[1];
+            plane_object_msg.center.z = center[2];
 
-          // Get plane polygon
-          for (int i = 0; i < cloud_hull->points.size (); i++) {
-            geometry_msgs::Point32 p;
-            p.x = cloud_hull->points[i].x;
-            p.y = cloud_hull->points[i].y;
-            p.z = cloud_hull->points[i].z;
+            // Get plane polygon
+            for (int i = 0; i < cloud_hull->points.size (); i++) {
+              geometry_msgs::Point32 p;
+              p.x = cloud_hull->points[i].x;
+              p.y = cloud_hull->points[i].y;
+              p.z = cloud_hull->points[i].z;
 
-            plane_object_msg.polygon.push_back(p);
+              plane_object_msg.polygon.push_back(p);
+            }
+
+            // Get plane coefficients
+            plane_object_msg.coef[0] = coefficients->values[0];
+            plane_object_msg.coef[1] = coefficients->values[1];
+            plane_object_msg.coef[2] = coefficients->values[2];
+            plane_object_msg.coef[3] = coefficients->values[3];
+
+            plane_object_msg.size.data = cloud_plane->points.size();
+            plane_object_msg.is_horizontal = true;
+
+            plane_object_msgs.objects.push_back(plane_object_msg);
+            extract_.setNegative(true);
+            extract_.filter(*cloud_filtered_);
           }
 
-          // Get plane coefficients
-          plane_object_msg.coef[0] = coefficients->values[0];
-          plane_object_msg.coef[1] = coefficients->values[1];
-          plane_object_msg.coef[2] = coefficients->values[2];
-          plane_object_msg.coef[3] = coefficients->values[3];
-
-          plane_object_msg.size.data = cloud_plane->points.size();
-          plane_object_msg.is_horizontal = true;
-          res.success = true;
-
-          plane_object_msgs.objects.push_back(plane_object_msg);
-          extract_.setNegative(true);
-          extract_.filter(*cloud_filtered_);
-
+          if (create_srv_res) {
+            plane_objects_ = plane_object_msgs;
+          }
 
         }
-
-        res.plane_objects = plane_object_msgs;
-
-
-
-
     }
 
 
@@ -406,9 +409,10 @@ class PointCloudProc{
     //
     // }
 
-    void extractObjects() {
+    void extractTabletop() {
 
       CloudT::Ptr cloud_objects (new CloudT);
+      // sensor_msgs::PointCloud2 tabletop_objects;
       pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
       prism_.setInputCloud(cloud_filtered_);
       prism_.setInputPlanarHull(cloud_hull_);
@@ -428,106 +432,62 @@ class PointCloudProc{
       ROS_INFO("Objects are segmented!");
       // TODO: Do we need post-processing?
 
+      toROSMsg(*cloud_objects, tabletop_objects_);
+      // res.object_cluster = tabletop_objects;
     }
 
-    // TODO:
+    // TODO: implement object-level clustering
     void clusterObjects(/* arguments */) {
       /* code */
     }
 
-  void createGPDMsg() {
-    geometry_msgs::Point camera_viewpoint;
-    camera_viewpoint.x = 0;
-    camera_viewpoint.y = 0;
-    camera_viewpoint.z = 0;
-    toROSMsg(*cloud_filtered_, gpd_cloud_);
-    gpd::CloudIndexed gpd_cloud;
-    gpd_cloud.cloud_sources.cloud = gpd_cloud_;
-    gpd_cloud.cloud_sources.view_points.push_back(camera_viewpoint);
-    std_msgs::Int64 camera_source, index;
-    camera_source.data = 0;
-    for (int i = 0; i < gpd_cloud_.width; i++) {
-      gpd_cloud.cloud_sources.camera_source.push_back(camera_source);
-    }
-
-    for (int i = 0; i < object_indices_->indices.size(); i++) {
-      index.data = object_indices_->indices[i];
-      gpd_cloud.indices.push_back(index);
-    }
-
-    gpd_cloud_pub_.publish(gpd_cloud);
-  }
-
-  // bool objectClusterServiceCb(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res){
-  //   if (!PointCloudProc::transformPointCloud()){
-  //     ROS_INFO("Couldn't transform point cloud!");
-  //     return false;
+  // void createGPDMsg() {
+  //   geometry_msgs::Point camera_viewpoint;
+  //   camera_viewpoint.x = 0;
+  //   camera_viewpoint.y = 0;
+  //   camera_viewpoint.z = 0;
+  //   toROSMsg(*cloud_filtered_, gpd_cloud_);
+  //   gpd::CloudIndexed gpd_cloud;
+  //   gpd_cloud.cloud_sources.cloud = gpd_cloud_;
+  //   gpd_cloud.cloud_sources.view_points.push_back(camera_viewpoint);
+  //   std_msgs::Int64 camera_source, index;
+  //   camera_source.data = 0;
+  //   for (int i = 0; i < gpd_cloud_.width; i++) {
+  //     gpd_cloud.cloud_sources.camera_source.push_back(camera_source);
   //   }
   //
-  //   if (!PointCloudProc::filterPointCloud()){
-  //     ROS_INFO("Couldn't filter point cloud!");
-  //     return false;
+  //   for (int i = 0; i < object_indices_->indices.size(); i++) {
+  //     index.data = object_indices_->indices[i];
+  //     gpd_cloud.indices.push_back(index);
   //   }
   //
-  //   PointCloudProc::segmentSinglePlane();
-  //   PointCloudProc::extractObjects();
-  //
-  //   return true;
+  //   gpd_cloud_pub_.publish(gpd_cloud);
   // }
 
-  bool createGPDMsgServiceCb(object_msgs::SinglePlaneSegmentation::Request &req,
-                             object_msgs::SinglePlaneSegmentation::Response &res){
-     if (!PointCloudProc::transformPointCloud()){
-       ROS_INFO("Couldn't transform point cloud!");
-       res.success = false;
-       return true;
-     }
-
-     if (!PointCloudProc::filterPointCloud(true)){
-       ROS_INFO("Couldn't filter point cloud!");
-       res.success = false;
-       return true;
-     }
-
-    PointCloudProc::segmentSinglePlane(res);
-    PointCloudProc::extractObjects();
-    PointCloudProc::createGPDMsg();
-    return true;
-
-  }
-
-  // bool segmentMultiplePlaneServiceCb(object_msgs::MultiPlaneSegmentation::Request &req,
-  //                                    object_msgs::MultiPlaneSegmentation::Response &res){
-  //   if (!PointCloudProc::transformPointCloud()){
-  //     ROS_INFO("Couldn't transform point cloud!");
-  //     return false;
-  //   }
+  // bool createGPDMsgServiceCb(point_cloud_proc::SinglePlaneSegmentation::Request &req,
+  //                            point_cloud_proc::SinglePlaneSegmentation::Response &res){
+  //    if (!PointCloudProc::transformPointCloud()){
+  //      ROS_INFO("Couldn't transform point cloud!");
+  //      res.success = false;
+  //      return true;
+  //    }
   //
-  //   PointCloudProc::segmentMultiplePlane(res);
+  //    if (!PointCloudProc::filterPointCloud(true)){
+  //      ROS_INFO("Couldn't filter point cloud!");
+  //      res.success = false;
+  //      return true;
+  //    }
+  //
+  //   PointCloudProc::segmentSinglePlane(res);
+  //   PointCloudProc::extractTabletop();
+  //   PointCloudProc::createGPDMsg();
   //   return true;
   //
   // }
 
-  bool segmentMultiplePlaneServiceCb(object_msgs::MultiPlaneSegmentation::Request &req,
-                                     object_msgs::MultiPlaneSegmentation::Response &res){
-    if (!PointCloudProc::transformPointCloud()){
-      ROS_INFO("Couldn't transform point cloud!");
-      return false;
-    }
 
-    if (!PointCloudProc::filterPointCloud(true)){
-      ROS_INFO("Couldn't filter point cloud!");
-      res.success = false;
-      return true;
-    }
-
-    PointCloudProc::segmentMultiplePlane(res);
-    return true;
-
-  }
-
-  bool segmentSinglePlaneServiceCb(object_msgs::SinglePlaneSegmentation::Request &req,
-                          object_msgs::SinglePlaneSegmentation::Response &res){
+  bool segmentSinglePlaneServiceCb(point_cloud_proc::SinglePlaneSegmentation::Request &req,
+                                   point_cloud_proc::SinglePlaneSegmentation::Response &res){
     if (!PointCloudProc::transformPointCloud()){
       ROS_INFO("Couldn't transform point cloud!");
       res.success = false;
@@ -540,9 +500,54 @@ class PointCloudProc{
       return true;
     }
 
-    PointCloudProc::segmentSinglePlane(res);
+    PointCloudProc::segmentSinglePlane(true);
+    res.plane_object = plane_object_;
+    res.success = true;
 
     return true;
+  }
+
+
+  bool segmentMultiplePlaneServiceCb(point_cloud_proc::MultiPlaneSegmentation::Request &req,
+                                     point_cloud_proc::MultiPlaneSegmentation::Response &res){
+    if (!PointCloudProc::transformPointCloud()){
+      ROS_INFO("Couldn't transform point cloud!");
+      res.success = false;
+      return true;
+    }
+
+    if (!PointCloudProc::filterPointCloud(true)){
+      ROS_INFO("Couldn't filter point cloud!");
+      res.success = false;
+      return true;
+    }
+
+    PointCloudProc::segmentMultiplePlane(true);
+    res.plane_objects = plane_objects_;
+    res.success = true;
+    return true;
+
+  }
+
+  bool extractTabletopServiceCb(point_cloud_proc::TabletopExtraction::Request &req,
+                                point_cloud_proc::TabletopExtraction::Response &res){
+    if (!PointCloudProc::transformPointCloud()){
+      ROS_INFO("Couldn't transform point cloud!");
+      res.success = false;
+      return true;
+    }
+
+    if (!PointCloudProc::filterPointCloud(false)){
+      ROS_INFO("Couldn't filter point cloud!");
+      res.success = false;
+      return true;
+    }
+    PointCloudProc::segmentSinglePlane(false);
+    PointCloudProc::extractTabletop();
+    res.object_cluster = tabletop_objects_;
+    res.success = true;
+    return true;
+
   }
 
   private:
@@ -560,7 +565,7 @@ class PointCloudProc{
     std::string point_cloud_topic_;
     CloudT::ConstPtr cloud_raw_;
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_;
-    sensor_msgs::PointCloud2 gpd_cloud_;
+    sensor_msgs::PointCloud2 gpd_cloud_, tabletop_objects_;
     pcl::PointIndices::Ptr object_indices_;
 
     boost::mutex pc_mutex_;
@@ -568,15 +573,18 @@ class PointCloudProc{
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
     ros::Publisher table_cloud_pub_, object_cloud_pub_, gpd_cloud_pub_, plane_polygon_pub_;
-    ros::ServiceServer object_cluster_srv_, create_gpd_msg_srv_;
+    ros::ServiceServer object_cluster_srv_, extract_tabletop_srv_, create_gpd_msg_srv_;
     ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
     tf::TransformListener listener_;
+
+    point_cloud_proc::PlaneObject plane_object_;
+    point_cloud_proc::PlaneObjects plane_objects_;
 
 
 };
 
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "object_seg");
+  ros::init(argc, argv, "point_cloud_proc");
   ros::NodeHandle n("~");
   PointCloudProc pc_tools(n);
   ros::spin();
