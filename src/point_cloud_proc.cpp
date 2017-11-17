@@ -64,6 +64,8 @@ class PointCloudProc{
       nh_.getParam("/filters/pass_limits", pass_limits_);
       nh_.getParam("/segmentation/prism_limits", prism_limits_);
       nh_.getParam("/point_cloud_topic", point_cloud_topic_);
+      nh_.getParam("/point_cloud_debug", debug_);
+
       point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
       table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
       object_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);

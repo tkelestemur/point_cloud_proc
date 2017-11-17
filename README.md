@@ -1,1 +1,6 @@
-# point_cloud_tools
+## Point Cloud Processing
+
+#### TODO:
+
+- [ ] Single plane segments also finds outliers, need to fix parameters.
+- [ ] Individual object clustering (with custom msg)
