@@ -22,6 +22,8 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
 	DIRECTORY msg
 	FILES
+	Object.msg
+	Objects.msg
   PlaneObject.msg
 	PlaneObjects.msg
 )
@@ -34,6 +36,7 @@ add_service_files(
   SinglePlaneSegmentation.srv
 	MultiPlaneSegmentation.srv
 	TabletopExtraction.srv
+	TabletopClustering.srv
 )
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
