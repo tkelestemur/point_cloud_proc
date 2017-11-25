@@ -355,8 +355,6 @@ class PointCloudProc{
     void clusterObjects(/* arguments */) {
 
       pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
-      // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_tabletop (new pcl::PointCloud<pcl::PointXYZ>);
-      // pcl::copyPointCloud(cloud_tabletop_, cloud_tabletop);
       tree->setInputCloud (cloud_tabletop_);
       std::vector<pcl::PointIndices> cluster_indices;
 
@@ -389,8 +387,8 @@ class PointCloudProc{
 
         j++;
         ROS_INFO_STREAM("# of points in object " << j << " : " << cloud_cluster->points.size());
-        toROSMsg(*cloud_cluster, tabletop_object.object_cloud);
-        tabletop_objects_.tabletop_objects.push_back(tabletop_object);
+        toROSMsg(*cloud_cluster, tabletop_object.cloud);
+        tabletop_objects_.objects.push_back(tabletop_object);
       }
     }
 
