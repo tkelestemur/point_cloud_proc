@@ -159,10 +159,10 @@ class PointCloudProc{
         return;
       } else ROS_INFO("Single plane is segmented!");
 
-      ROS_INFO_STREAM("Coefficients: " << coefficients->values[0] << " "
-                                       << coefficients->values[1] << " "
-                                       << coefficients->values[2] << " "
-                                       << coefficients->values[3]);
+      // ROS_INFO_STREAM("Coefficients: " << coefficients->values[0] << " "
+      //                                  << coefficients->values[1] << " "
+      //                                  << coefficients->values[2] << " "
+      //                                  << coefficients->values[3]);
 
       extract_.setInputCloud (cloud_filtered_);
       extract_.setNegative(false);
@@ -353,7 +353,7 @@ class PointCloudProc{
 
 
     void clusterObjects(/* arguments */) {
-
+      tabletop_objects_.objects.clear();
       pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
       tree->setInputCloud (cloud_tabletop_);
       std::vector<pcl::PointIndices> cluster_indices;
@@ -365,10 +365,11 @@ class PointCloudProc{
       ec_.setInputCloud (cloud_tabletop_);
       ec_.extract (cluster_indices);
 
+      int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
       for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
       {
-        static int j = 0;
+
         CloudT::Ptr cloud_cluster (new CloudT);
         for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
