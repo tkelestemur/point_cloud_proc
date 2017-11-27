@@ -24,8 +24,8 @@ add_message_files(
 	FILES
 	Object.msg
 	Objects.msg
-  PlaneObject.msg
-	PlaneObjects.msg
+  Plane.msg
+	Planes.msg
 )
 
 

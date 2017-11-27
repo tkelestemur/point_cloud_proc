@@ -8,7 +8,7 @@
 // #include <gpd/CloudIndexed.h>
 #include <shape_msgs/Plane.h>
 #include <shape_msgs/Mesh.h>
-#include <point_cloud_proc/PlaneObjects.h>
+#include <point_cloud_proc/Planes.h>
 #include <point_cloud_proc/Objects.h>
 #include <point_cloud_proc/SinglePlaneSegmentation.h>
 #include <point_cloud_proc/MultiPlaneSegmentation.h>
@@ -186,7 +186,7 @@ class PointCloudProc{
 
       if (create_srv_res) {
         // Construct plane object msg
-        point_cloud_proc::PlaneObject plane_object_msg;
+        point_cloud_proc::Plane plane_object_msg;
 
         pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
 
@@ -225,8 +225,8 @@ class PointCloudProc{
 
     void segmentMultiplePlane(bool create_srv_res) {
       //   // Construct plane object msg
-        point_cloud_proc::PlaneObjects plane_object_msgs;
-        point_cloud_proc::PlaneObject plane_object_msg;
+        point_cloud_proc::Planes plane_object_msgs;
+        point_cloud_proc::Plane plane_object_msg;
         int MIN_PLANE_SIZE = 1000;
         int no_planes = 0;
         CloudT::Ptr cloud_plane (new CloudT);
@@ -463,7 +463,7 @@ class PointCloudProc{
      if (!PointCloudProc::transformPointCloud()){
        ROS_INFO("Couldn't transform point cloud!");
       //  res.success = false;
-       return true;
+       return false;
      }
 
      if (!PointCloudProc::filterPointCloud(false)){
@@ -510,8 +510,8 @@ class PointCloudProc{
     ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
     tf::TransformListener listener_;
 
-    point_cloud_proc::PlaneObject plane_object_;
-    point_cloud_proc::PlaneObjects plane_objects_;
+    point_cloud_proc::Plane plane_object_;
+    point_cloud_proc::Planes plane_objects_;
     point_cloud_proc::Object tabletop_object_;
     point_cloud_proc::Objects tabletop_objects_;
 
