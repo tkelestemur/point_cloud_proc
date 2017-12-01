@@ -62,6 +62,7 @@ class PointCloudProc{
       prism_limits_.push_back(0.0);
       prism_limits_.push_back(0.05);
       point_cloud_topic_ = "/hsrb/head_rgbd_sensor/depth_registered/points";
+      fixed_frame_ = "/base_link";
 
       nh_.getParam("/filters/leaf_size", leaf_size_);
       nh_.getParam("/filters/use_passthrough", use_pass);
@@ -70,6 +71,7 @@ class PointCloudProc{
       nh_.getParam("/segmentation/prism_limits", prism_limits_);
       nh_.getParam("/point_cloud_topic", point_cloud_topic_);
       nh_.getParam("/point_cloud_debug", debug_);
+      nh_.getParam("/fixed_frame", fixed_frame_);
 
       point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
       table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
@@ -93,7 +95,7 @@ class PointCloudProc{
     bool transformPointCloud() {
       CloudT::Ptr cloud_transformed(new CloudT);
       std::string fixed_frame = "/base_link"; // TODO: Make it rosparam
-      bool transform_success = pcl_ros::transformPointCloud(fixed_frame, *cloud_raw_, *cloud_transformed, listener_);
+      bool transform_success = pcl_ros::transformPointCloud(fixed_frame_, *cloud_raw_, *cloud_transformed, listener_);
       cloud_transformed_ = cloud_transformed;
       return transform_success;
     }
@@ -359,7 +361,7 @@ class PointCloudProc{
       std::vector<pcl::PointIndices> cluster_indices;
 
       ec_.setClusterTolerance (0.02);
-      ec_.setMinClusterSize (100);
+      ec_.setMinClusterSize (300);
       ec_.setMaxClusterSize (25000);
       ec_.setSearchMethod (tree);
       ec_.setInputCloud (cloud_tabletop_);
@@ -374,11 +376,13 @@ class PointCloudProc{
         for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
 
+        cloud_cluster->header.frame_id = cloud_tabletop_->header.frame_id;
         cloud_cluster->width = cloud_cluster->points.size ();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
 
         point_cloud_proc::Object tabletop_object;
+        pcl_conversions::fromPCL(cloud_cluster->header, tabletop_object.header);
 
         Eigen::Vector4f center;
         pcl::compute3DCentroid(*cloud_cluster, center);
@@ -463,13 +467,13 @@ class PointCloudProc{
 
      if (!PointCloudProc::transformPointCloud()){
        ROS_INFO("Couldn't transform point cloud!");
-      //  res.success = false;
+       res.success = false;
        return false;
      }
 
      if (!PointCloudProc::filterPointCloud(false)){
        ROS_INFO("Couldn't filter point cloud!");
-      //  res.success = false;
+       res.success = false;
        return true;
      }
 
@@ -495,7 +499,7 @@ class PointCloudProc{
     int use_pass, use_voxel;
     float leaf_size_;
     std::vector<float> pass_limits_, prism_limits_;
-    std::string point_cloud_topic_;
+    std::string point_cloud_topic_, fixed_frame_;
     CloudT::ConstPtr cloud_raw_;
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
     sensor_msgs::PointCloud2 gpd_cloud_, tabletop_cloud_;
