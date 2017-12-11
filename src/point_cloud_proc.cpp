@@ -1,21 +1,18 @@
 // ROS
-#include "ros/ros.h"
+#include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/image_encodings.h>
 #include <std_srvs/Empty.h>
 #include <tf/transform_listener.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
-// #include <gpd/CloudIndexed.h>
-#include <shape_msgs/Plane.h>
-#include <shape_msgs/Mesh.h>
 #include <point_cloud_proc/Planes.h>
 #include <point_cloud_proc/Objects.h>
 #include <point_cloud_proc/SinglePlaneSegmentation.h>
 #include <point_cloud_proc/MultiPlaneSegmentation.h>
 #include <point_cloud_proc/TabletopExtraction.h>
 #include <point_cloud_proc/TabletopClustering.h>
-#include <geometric_shapes/body_operations.h>
-#include <geometric_shapes/shape_operations.h>
 
 // PCL
 #include <pcl_ros/point_cloud.h>
@@ -75,7 +72,9 @@ class PointCloudProc{
 
       point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
       table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
-      object_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);
+      multi_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
+      single_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);
+      single_object_image_pub_ = nh_.advertise<sensor_msgs::Image>("object_image", 10);
       plane_polygon_pub_ = nh_.advertise<geometry_msgs::PolygonStamped>("plane_polygon", 10);
 
       segment_multiple_plane_srv_ = nh_.advertiseService ("segment_multi_plane", &PointCloudProc::segmentMultiplePlaneServiceCb, this);
@@ -89,7 +88,7 @@ class PointCloudProc{
     void pointCloudCb(const CloudT::ConstPtr &msg) {
       boost::mutex::scoped_lock lock(pc_mutex_);
       cloud_raw_ = msg;
-      // ROS_INFO("Got new point cloud!");
+
     }
 
     bool transformPointCloud() {
@@ -126,6 +125,8 @@ class PointCloudProc{
         vg_.filter (*cloud_filtered_2);
         cloud_filtered_ = cloud_filtered_2;
       } else cloud_filtered_ = cloud_filtered;
+
+
 
 
       ROS_INFO("Point cloud is filtered!");
@@ -343,8 +344,9 @@ class PointCloudProc{
 
       cloud_tabletop_ = cloud_objects;
       if (debug_) {
-        object_cloud_pub_.publish(cloud_objects);
+        multi_object_pub_.publish(cloud_objects);
       }
+
 
       ROS_INFO("Objects are segmented!");
       // TODO: Do we need post-processing?
@@ -354,7 +356,7 @@ class PointCloudProc{
     }
 
 
-    void clusterObjects(/* arguments */) {
+    void clusterObjects() {
       tabletop_objects_.objects.clear();
       pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
       tree->setInputCloud (cloud_tabletop_);
@@ -369,31 +371,49 @@ class PointCloudProc{
 
       int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
-      for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
-      {
+      for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
 
         CloudT::Ptr cloud_cluster (new CloudT);
-        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
+        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
+          std::cout << "points" << cloud_tabletop_->points[*pit] <<'\n';
+        }
+
+        // extract_.setInputCloud (cloud_tabletop_);
+        // extract_.setNegative(false);
+        // extract_.setIndices (it-);
+        // extract_.filter (*cloud_cluster);
 
         cloud_cluster->header.frame_id = cloud_tabletop_->header.frame_id;
         cloud_cluster->width = cloud_cluster->points.size ();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
 
-        point_cloud_proc::Object tabletop_object;
-        pcl_conversions::fromPCL(cloud_cluster->header, tabletop_object.header);
+        // get object point cloud
+        point_cloud_proc::Object object;
+        pcl_conversions::fromPCL(cloud_cluster->header, object.header);
+        toROSMsg(*cloud_cluster, object.cloud);
 
+        // get object center
         Eigen::Vector4f center;
         pcl::compute3DCentroid(*cloud_cluster, center);
-        tabletop_object.center.x = center[0];
-        tabletop_object.center.y = center[1];
-        tabletop_object.center.z = center[2];
+        object.center.x = center[0];
+        object.center.y = center[1];
+        object.center.z = center[2];
+
+        // get rgb image
+        sensor_msgs::Image rgb_image;
+
 
         j++;
         ROS_INFO_STREAM("# of points in object " << j << " : " << cloud_cluster->points.size());
-        toROSMsg(*cloud_cluster, tabletop_object.cloud);
-        tabletop_objects_.objects.push_back(tabletop_object);
+
+        tabletop_objects_.objects.push_back(object);
+
+        if (debug_) {
+          single_object_pub_.publish(object.cloud);
+        }
+
       }
     }
 
@@ -510,7 +530,7 @@ class PointCloudProc{
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
     ros::Publisher table_cloud_pub_, plane_polygon_pub_;
-    ros::Publisher objec_clusters_pub_, object_cloud_pub_;
+    ros::Publisher multi_object_pub_, single_object_pub_, single_object_image_pub_;
     ros::ServiceServer extract_tabletop_srv_, cluster_tabletop_srv_;
     ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
     tf::TransformListener listener_;
