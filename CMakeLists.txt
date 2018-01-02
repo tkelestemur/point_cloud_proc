@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(point_cloud_proc)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -114,6 +114,9 @@ include_directories(
 
 add_executable(point_cloud_proc src/point_cloud_proc.cpp)
 target_link_libraries(point_cloud_proc ${catkin_LIBRARIES})
+
+add_executable(point_cloud_frame_pub src/point_cloud_frame_pub.cpp)
+target_link_libraries(point_cloud_frame_pub ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
