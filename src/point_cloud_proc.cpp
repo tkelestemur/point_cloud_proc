@@ -19,6 +19,7 @@
 #include <pcl_ros/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/common/common.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/filters/passthrough.h>
@@ -38,6 +39,10 @@
 #include <pcl/segmentation/organized_connected_component_segmentation.h>
 #include <pcl/features/integral_image_normal.h>
 #include <pcl/features/normal_3d.h>
+#include <pcl/features/normal_3d_omp.h>
+#include <pcl/features/fpfh_omp.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/sample_consensus_prerejective.h>
 
 // Other
 #include <boost/thread/mutex.hpp>
@@ -47,7 +52,12 @@
 class PointCloudProc{
 
   typedef pcl::PointXYZRGB PointT;
+  typedef pcl::PointNormal PointNT;
+  typedef pcl::FPFHSignature33 FeatureT;
   typedef pcl::PointCloud<PointT> CloudT;
+  typedef pcl::PointCloud<PointNT> CloudNT;
+  typedef pcl::PointCloud<FeatureT> FeatureCloudT;
+
 
   public:
     PointCloudProc(ros::NodeHandle n) : nh_(n), debug_(false) {
@@ -65,8 +75,6 @@ class PointCloudProc{
       fixed_frame_ = "/base_link";
 
       nh_.getParam("/filters/leaf_size", leaf_size_);
-      nh_.getParam("/filters/use_passthrough", use_pass);
-      nh_.getParam("/filters/use_voxel", use_voxel);
       nh_.getParam("/filters/pass_limits", pass_limits_);
       nh_.getParam("/segmentation/prism_limits", prism_limits_);
       nh_.getParam("/point_cloud_topic", point_cloud_topic_);
@@ -78,7 +86,7 @@ class PointCloudProc{
       if (debug_) {
         table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
         multi_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
-        single_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("object_cloud", 10);
+        single_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("recognized_object", 10);
         single_object_image_pub_ = nh_.advertise<sensor_msgs::Image>("object_image", 10);
         plane_polygon_pub_ = nh_.advertise<geometry_msgs::PolygonStamped>("plane_polygon", 10);
       }
@@ -87,6 +95,7 @@ class PointCloudProc{
       segment_single_plane_srv_ = nh_.advertiseService ("segment_single_plane", &PointCloudProc::segmentSinglePlaneServiceCb, this);
       extract_tabletop_srv_ = nh_.advertiseService ("extract_tabletop", &PointCloudProc::extractTabletopServiceCb, this);
       cluster_tabletop_srv_ = nh_.advertiseService ("cluster_tabletop", &PointCloudProc::clusterTabletopObjectsServiceCb, this);
+      recognize_object_srv_ = nh_.advertiseService ("recognize_object", &PointCloudProc::recognizeObjectServiceCb, this);
 
 
     }
@@ -101,6 +110,8 @@ class PointCloudProc{
       CloudT::Ptr cloud_transformed(new CloudT);
       bool transform_success = pcl_ros::transformPointCloud(fixed_frame_, *cloud_raw_, *cloud_transformed, listener_);
       cloud_transformed_ = cloud_transformed;
+
+
       return transform_success;
     }
 
@@ -270,8 +281,6 @@ class PointCloudProc{
         seg_.setEpsAngle(25.0f * (M_PI/180.0f));
         seg_.setDistanceThreshold (0.01);
 
-
-
         while(true) {
 
           pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
@@ -375,23 +384,22 @@ class PointCloudProc{
       prism_.setHeightLimits(prism_limits_[0], prism_limits_[1]); // Height limits
       prism_.segment(*object_indices);
 
-      object_indices_ = object_indices;
-
       extract_.setInputCloud (cloud_filtered_);
       extract_.setIndices(object_indices);
       extract_.filter(*cloud_objects);
 
-      cloud_tabletop_ = cloud_objects;
+
+      // pcl::io::savePCDFileASCII ("/home/tarik/Desktop/objects/scene.pcd", *cloud_objects);
+
       if (debug_) {
         multi_object_pub_.publish(cloud_objects);
       }
 
+      cloud_tabletop_ = cloud_objects;
 
       ROS_INFO("Objects are segmented!");
-      // TODO: Do we need post-processing?
 
       toROSMsg(*cloud_objects, tabletop_cloud_);
-      // res.object_cluster = tabletop_objects;
     }
 
 
@@ -408,25 +416,26 @@ class PointCloudProc{
       ec_.setInputCloud (cloud_tabletop_);
       ec_.extract (cluster_indices);
 
+
       int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
       for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
 
         CloudT::Ptr cloud_cluster (new CloudT);
+
         for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
-          // std::cout << "points" << cloud_tabletop_->points[*pit] <<'\n';
         }
 
-        // extract_.setInputCloud (cloud_tabletop_);
-        // extract_.setNegative(false);
-        // extract_.setIndices (it-);
-        // extract_.filter (*cloud_cluster);
-
-        cloud_cluster->header.frame_id = cloud_tabletop_->header.frame_id;
-        cloud_cluster->width = cloud_cluster->points.size ();
+        cloud_cluster->header = cloud_tabletop_->header;
+        cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
+
+        clusters_.push_back(cloud_cluster);
+        // if (save_object_pcd_) {
+        //   pcl::io::savePCDFileASCII ("/home/tarik/Desktop/objects/object.pcd", *cloud_cluster);
+        // }
 
         // get object point cloud
         point_cloud_proc::Object object;
@@ -439,7 +448,6 @@ class PointCloudProc{
         object.center.x = center[0];
         object.center.y = center[1];
         object.center.z = center[2];
-
 
         // get min max points coords
         Eigen::Vector4f min_vals, max_vals;
@@ -457,11 +465,129 @@ class PointCloudProc{
 
         tabletop_objects_.objects.push_back(object);
 
-        if (debug_) {
-          single_object_pub_.publish(object.cloud);
+      }
+    }
+
+
+    void getICPScores(/* arguments */) {
+
+      CloudT::Ptr object (new CloudT);
+      CloudT::Ptr result (new CloudT);
+      CloudT::Ptr recognized_object (new CloudT);
+      std::string object_path = "/home/tarik/Desktop/objects/object.pcd";
+      std::vector<double> scores;
+
+      if (pcl::io::loadPCDFile<PointT> (object_path, *object) < 0){
+        ROS_ERROR("Error loading object/scene file!");
+      }
+
+      pcl::IterativeClosestPoint<PointT, PointT> icp;
+
+      double max_score = std::numeric_limits<double>::min();
+
+      for (size_t i = 0; i < clusters_.size(); i++) {
+        icp.setInputSource(clusters_[i]);
+        icp.setInputTarget(object);
+        icp.align(*result);
+        ROS_INFO_STREAM("score: " << icp.getFitnessScore());
+        if (icp.hasConverged()) {
+          if (icp.getFitnessScore() > max_score) {
+            max_score = icp.getFitnessScore();
+            ROS_INFO_STREAM("max score: " << max_score);
+            recognized_object = result;
+          }
         }
 
       }
+
+
+      if (debug_) {
+        single_object_pub_.publish(recognized_object);
+      }
+
+    }
+
+    void recognizeObject() {
+      CloudNT::Ptr scene (new CloudNT);
+      CloudNT::Ptr object (new CloudNT);
+      CloudNT::Ptr object_aligned (new CloudNT);
+      CloudNT::Ptr object_aligned_transformed (new CloudNT);
+      FeatureCloudT::Ptr object_features (new FeatureCloudT);
+      FeatureCloudT::Ptr scene_features (new FeatureCloudT);
+
+      std::string object_path = "/home/tarik/Desktop/objects/object.pcd";
+
+      if (pcl::io::loadPCDFile<PointNT> (object_path, *object) < 0){
+        ROS_ERROR("Error loading object/scene file!");
+      }
+
+      pcl::copyPointCloud(*cloud_tabletop_, *scene);
+
+      ROS_INFO_STREAM("scene size: " << scene->points.size());
+      ROS_INFO_STREAM("object size: " << object->points.size());
+
+
+      pcl::VoxelGrid<PointNT> grid;
+      const float leaf = 0.005f;
+      grid.setLeafSize (leaf, leaf, leaf);
+      grid.setInputCloud (object);
+      grid.filter (*object);
+      grid.setInputCloud (scene);
+      grid.filter (*scene);
+
+      pcl::NormalEstimationOMP<PointNT,PointNT> nest;
+
+      nest.setRadiusSearch (0.01);
+      nest.setInputCloud (scene);
+      nest.compute (*scene);
+      nest.setInputCloud (object);
+      nest.compute (*object);
+
+      pcl::FPFHEstimationOMP<PointNT,PointNT,FeatureT> fest;
+      fest.setRadiusSearch (0.01);
+      fest.setInputCloud (object);
+      fest.setInputNormals (object);
+      fest.compute (*object_features);
+      fest.setInputCloud (scene);
+      fest.setInputNormals (scene);
+      fest.compute (*scene_features);
+
+      pcl::SampleConsensusPrerejective<PointNT,PointNT,FeatureT> align;
+      align.setInputSource (object);
+      align.setSourceFeatures (object_features);
+      align.setInputTarget (scene);
+      align.setTargetFeatures (scene_features);
+      align.setMaximumIterations (50000); // Number of RANSAC iterations
+      align.setNumberOfSamples (10); // Number of points to sample for generating/prerejecting a pose
+      align.setCorrespondenceRandomness (5); // Number of nearest features to use
+      align.setSimilarityThreshold (0.5f); // Polygonal edge length similarity threshold
+      align.setMaxCorrespondenceDistance (2.5f * leaf); // Inlier threshold
+      align.setInlierFraction (0.25f); // Required inlier fraction for accepting a pose hypothesis
+      {
+        // pcl::ScopeTime t("Alignment");
+        align.align (*object_aligned);
+      }
+
+      if (align.hasConverged()){
+        ROS_INFO("Object aligment is successfull!");
+        std::vector<int> inliers = align.getInliers();
+        Eigen::Matrix4f transformation = align.getFinalTransformation ();
+        pcl::transformPointCloud(*object_aligned, *object_aligned_transformed, transformation);
+        pcl::console::print_info ("    | %6.3f %6.3f %6.3f | \n", transformation (0,0), transformation (0,1), transformation (0,2));
+        pcl::console::print_info ("R = | %6.3f %6.3f %6.3f | \n", transformation (1,0), transformation (1,1), transformation (1,2));
+        pcl::console::print_info ("    | %6.3f %6.3f %6.3f | \n", transformation (2,0), transformation (2,1), transformation (2,2));
+        pcl::console::print_info ("\n");
+        pcl::console::print_info ("t = < %0.3f, %0.3f, %0.3f >\n", transformation (0,3), transformation (1,3), transformation (2,3));
+        pcl::console::print_info ("\n");
+        pcl::console::print_info ("Inliers: %i/%i\n", align.getInliers ().size (), object->size ());
+        object_aligned_transformed->header = cloud_tabletop_->header;
+        single_object_pub_.publish(object_aligned_transformed);
+      }
+      else{
+        ROS_WARN("Object aligment is not successfull!");
+      }
+
+
     }
 
 
@@ -553,6 +679,25 @@ class PointCloudProc{
      return true;
   }
 
+  bool recognizeObjectServiceCb(std_srvs::Empty::Request &req,
+                                std_srvs::Empty::Response &res){
+    if (!PointCloudProc::transformPointCloud()){
+      ROS_INFO("Couldn't transform point cloud!");
+      return true;
+    }
+
+    if (!PointCloudProc::filterPointCloud(false)){
+      ROS_INFO("Couldn't filter point cloud!");
+      return true;
+    }
+    PointCloudProc::segmentSinglePlane(false);
+    PointCloudProc::extractTabletop();
+    PointCloudProc::clusterObjects();
+    PointCloudProc::getICPScores();
+    return true;
+
+  }
+
   private:
     pcl::PassThrough<PointT> pass_;
     pcl::VoxelGrid<PointT> vg_;
@@ -563,8 +708,7 @@ class PointCloudProc{
     pcl::EuclideanClusterExtraction<PointT> ec_;
     // pcl::ModelOutlierRemoval<PointT> model_filter_;
 
-    bool debug_;
-    int use_pass, use_voxel;
+    bool debug_, use_voxel;
     float leaf_size_;
     std::vector<float> pass_limits_, prism_limits_;
     std::string point_cloud_topic_, fixed_frame_;
@@ -572,6 +716,7 @@ class PointCloudProc{
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
     sensor_msgs::PointCloud2 gpd_cloud_, tabletop_cloud_;
     pcl::PointIndices::Ptr object_indices_;
+    std::vector<CloudT::Ptr> clusters_;
 
     boost::mutex pc_mutex_;
 
@@ -579,7 +724,7 @@ class PointCloudProc{
     ros::Subscriber point_cloud_sub_;
     ros::Publisher table_cloud_pub_, plane_polygon_pub_;
     ros::Publisher multi_object_pub_, single_object_pub_, single_object_image_pub_;
-    ros::ServiceServer extract_tabletop_srv_, cluster_tabletop_srv_;
+    ros::ServiceServer extract_tabletop_srv_, cluster_tabletop_srv_, recognize_object_srv_;
     ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
     tf::TransformListener listener_;
 
