@@ -27,8 +27,6 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/project_inliers.h>
-// #include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/filters/model_outlier_removal.h>
 #include <pcl/surface/convex_hull.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -376,6 +374,19 @@ class PointCloudProc{
       ec_.extract (cluster_indices);
 
       pcl::MomentOfInertiaEstimation <PointT> intertia_est_;
+      pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
+      pca_.setInputCloud(cloud_tabletop_);
+
+      // for (int i = 0; i < cluster_indices.size(); i++) {
+      //   pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
+      //   object_indices->indices = cluster_indices[i].indices;
+      //   Eigen::Matrix3f pca_vector(3,3);
+      //   pca_.setIndices(object_indices); //not sure what to put in brackets, everything I thought of returns an error!
+      //   pca_vector = pca_.getEigenVectors();
+      //   std::cout << "eigen vectors: " << pca_vector << std::endl;
+      // }
+      //
+
 
       int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
@@ -387,43 +398,43 @@ class PointCloudProc{
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
         }
 
+
+        pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
+        object_indices->indices = it->indices;
+        Eigen::Matrix3f eigen_vectors;
+        Eigen::Vector3f eigen_values;
+        pca_.setIndices(object_indices); 
+        eigen_vectors = pca_.getEigenVectors();
+        eigen_values = pca_.getEigenValues();
+        std::cout << "eigen vectors : " << std::endl << eigen_vectors << std::endl;
+        std::cout << "eigen values : " << std::endl << eigen_values << std::endl;
+
         cloud_cluster->header = cloud_tabletop_->header;
         cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
 
-        PointT min_point_OBB;
-        PointT max_point_OBB;
-        PointT position_OBB;
-        Eigen::Matrix3f rotational_matrix_OBB;
-        Eigen::Vector3f mass_center;
-        Eigen::Vector3f major_vector, middle_vector, minor_vector;
-
-
-        intertia_est_.setInputCloud (cloud_tabletop_);
-        intertia_est_.compute();
-        intertia_est_.getOBB (min_point_OBB, max_point_OBB, position_OBB, rotational_matrix_OBB);
-        intertia_est_.getEigenVectors (major_vector, middle_vector, minor_vector);
-        intertia_est_.getMassCenter (mass_center);
-
-
-        clusters_.push_back(cloud_cluster);
+        // PointT min_point_OBB;
+        // PointT max_point_OBB;
+        // PointT position_OBB;
+        // Eigen::Matrix3f rotational_matrix_OBB;
+        // Eigen::Vector3f mass_center;
+        // Eigen::Vector3f major_vector, middle_vector, minor_vector;
+        //
+        //
+        // intertia_est_.setInputCloud (cloud_tabletop_);
+        // intertia_est_.compute();
+        // intertia_est_.getOBB (min_point_OBB, max_point_OBB, position_OBB, rotational_matrix_OBB);
+        // intertia_est_.getEigenVectors (major_vector, middle_vector, minor_vector);
+        // intertia_est_.getMassCenter (mass_center);
+        //
+        //
+        // clusters_.push_back(cloud_cluster);
 
         // get object point cloud
         point_cloud_proc::Object object;
         pcl_conversions::fromPCL(cloud_cluster->header, object.header);
         toROSMsg(*cloud_cluster, object.cloud);
-
-        // geometry_msgs::Pose cluster_pose;
-        object.pose.position.x = mass_center(0);
-        object.pose.position.y = mass_center(1);
-        object.pose.position.z = mass_center(2);
-        Eigen::Quaternionf quat (rotational_matrix_OBB);
-
-        object.pose.orientation.x = quat.x();
-        object.pose.orientation.y = quat.y();
-        object.pose.orientation.z = quat.z();
-        object.pose.orientation.w = quat.w();
 
 
         // get object center
@@ -432,6 +443,18 @@ class PointCloudProc{
         object.center.x = center[0];
         object.center.y = center[1];
         object.center.z = center[2];
+
+
+        // geometry_msgs::Pose cluster_pose;
+        object.pose.position.x = center[0];
+        object.pose.position.y = center[1];
+        object.pose.position.z = center[2];
+        Eigen::Quaternionf quat (eigen_vectors);
+
+        object.pose.orientation.x = quat.x();
+        object.pose.orientation.y = quat.y();
+        object.pose.orientation.z = quat.z();
+        object.pose.orientation.w = quat.w();
 
         // get min max points coords
         Eigen::Vector4f min_vals, max_vals;
