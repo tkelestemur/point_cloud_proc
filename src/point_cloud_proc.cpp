@@ -375,11 +375,7 @@ class PointCloudProc{
       ec_.setInputCloud (cloud_tabletop_);
       ec_.extract (cluster_indices);
 
-
-
       pcl::MomentOfInertiaEstimation <PointT> intertia_est_;
-
-
 
       int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
@@ -500,7 +496,7 @@ class PointCloudProc{
     }
 
     PointCloudProc::segmentMultiplePlane(true);
-    res.plane_objects = plane_objects_;
+    res.planes = plane_objects_.objects;
     res.success = true;
     return true;
 
@@ -565,7 +561,7 @@ class PointCloudProc{
      }
 
      PointCloudProc::clusterObjects();
-     res.tabletop_objects = tabletop_objects_;
+     res.objects = tabletop_objects_.objects;
      res.success = true;
 
      return true;
@@ -604,7 +600,6 @@ class PointCloudProc{
 
     point_cloud_proc::Plane plane_object_;
     point_cloud_proc::Planes plane_objects_;
-    point_cloud_proc::Object tabletop_object_;
     point_cloud_proc::Objects tabletop_objects_;
 
 };
