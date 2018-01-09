@@ -373,9 +373,9 @@ class PointCloudProc{
       ec_.setInputCloud (cloud_tabletop_);
       ec_.extract (cluster_indices);
 
-      pcl::MomentOfInertiaEstimation <PointT> intertia_est_;
-      pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
-      pca_.setInputCloud(cloud_tabletop_);
+      // pcl::MomentOfInertiaEstimation <PointT> intertia_est_;
+      // pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
+      // pca_.setInputCloud(cloud_tabletop_);
 
       // for (int i = 0; i < cluster_indices.size(); i++) {
       //   pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
@@ -399,15 +399,15 @@ class PointCloudProc{
         }
 
 
-        pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
-        object_indices->indices = it->indices;
-        Eigen::Matrix3f eigen_vectors;
-        Eigen::Vector3f eigen_values;
-        pca_.setIndices(object_indices); 
-        eigen_vectors = pca_.getEigenVectors();
-        eigen_values = pca_.getEigenValues();
-        std::cout << "eigen vectors : " << std::endl << eigen_vectors << std::endl;
-        std::cout << "eigen values : " << std::endl << eigen_values << std::endl;
+        // pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
+        // object_indices->indices = it->indices;
+        // Eigen::Matrix3f eigen_vectors;
+        // Eigen::Vector3f eigen_values;
+        // pca_.setIndices(object_indices);
+        // eigen_vectors = pca_.getEigenVectors();
+        // eigen_values = pca_.getEigenValues();
+        // std::cout << "eigen vectors : " << std::endl << eigen_vectors << std::endl;
+        // std::cout << "eigen values : " << std::endl << eigen_values << std::endl;
 
         cloud_cluster->header = cloud_tabletop_->header;
         cloud_cluster->width = cloud_cluster->points.size();
@@ -445,16 +445,16 @@ class PointCloudProc{
         object.center.z = center[2];
 
 
-        // geometry_msgs::Pose cluster_pose;
-        object.pose.position.x = center[0];
-        object.pose.position.y = center[1];
-        object.pose.position.z = center[2];
-        Eigen::Quaternionf quat (eigen_vectors);
-
-        object.pose.orientation.x = quat.x();
-        object.pose.orientation.y = quat.y();
-        object.pose.orientation.z = quat.z();
-        object.pose.orientation.w = quat.w();
+        // // geometry_msgs::Pose cluster_pose;
+        // object.pose.position.x = center[0];
+        // object.pose.position.y = center[1];
+        // object.pose.position.z = center[2];
+        // Eigen::Quaternionf quat (eigen_vectors);
+        //
+        // object.pose.orientation.x = quat.x();
+        // object.pose.orientation.y = quat.y();
+        // object.pose.orientation.z = quat.z();
+        // object.pose.orientation.w = quat.w();
 
         // get min max points coords
         Eigen::Vector4f min_vals, max_vals;
