@@ -44,6 +44,7 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 class PointCloudProc{
 
@@ -374,8 +375,8 @@ class PointCloudProc{
       ec_.extract (cluster_indices);
 
       // pcl::MomentOfInertiaEstimation <PointT> intertia_est_;
-      // pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
-      // pca_.setInputCloud(cloud_tabletop_);
+      pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
+
 
       // for (int i = 0; i < cluster_indices.size(); i++) {
       //   pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
@@ -390,7 +391,7 @@ class PointCloudProc{
 
       int j = 0;
       ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
-      for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
+      for (std::vector<pcl::PointIndices>::iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
 
         CloudT::Ptr cloud_cluster (new CloudT);
 
@@ -398,16 +399,18 @@ class PointCloudProc{
           cloud_cluster->points.push_back (cloud_tabletop_->points[*pit]);
         }
 
+        // pcl::PointIndices & object_indices = *(*it);
 
-        // pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
-        // object_indices->indices = it->indices;
-        // Eigen::Matrix3f eigen_vectors;
-        // Eigen::Vector3f eigen_values;
-        // pca_.setIndices(object_indices);
-        // eigen_vectors = pca_.getEigenVectors();
-        // eigen_values = pca_.getEigenValues();
-        // std::cout << "eigen vectors : " << std::endl << eigen_vectors << std::endl;
-        // std::cout << "eigen values : " << std::endl << eigen_values << std::endl;
+        pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
+        object_indices->indices = it->indices;
+        Eigen::Matrix3f eigen_vectors;
+        Eigen::Vector3f eigen_values;
+        pca_.setInputCloud(cloud_tabletop_);
+        pca_.setIndices(object_indices);
+        eigen_vectors = pca_.getEigenVectors();
+        eigen_values = pca_.getEigenValues();
+        std::cout << "eigen vectors : " << std::endl << eigen_vectors << std::endl;
+        std::cout << "eigen values : " << std::endl << eigen_values << std::endl;
 
         cloud_cluster->header = cloud_tabletop_->header;
         cloud_cluster->width = cloud_cluster->points.size();
@@ -444,18 +447,18 @@ class PointCloudProc{
         object.center.y = center[1];
         object.center.z = center[2];
 
+        // geometry_msgs::Pose cluster_pose;
+        object.pose.position.x = center[0];
+        object.pose.position.y = center[1];
+        object.pose.position.z = center[2];
+        Eigen::Quaternionf quat (eigen_vectors);
+        quat.normalize();
 
-        // // geometry_msgs::Pose cluster_pose;
-        // object.pose.position.x = center[0];
-        // object.pose.position.y = center[1];
-        // object.pose.position.z = center[2];
-        // Eigen::Quaternionf quat (eigen_vectors);
-        //
-        // object.pose.orientation.x = quat.x();
-        // object.pose.orientation.y = quat.y();
-        // object.pose.orientation.z = quat.z();
-        // object.pose.orientation.w = quat.w();
-
+        object.pose.orientation.x = quat.x();
+        object.pose.orientation.y = quat.y();
+        object.pose.orientation.z = quat.z();
+        object.pose.orientation.w = quat.w();
+        std::cout << "quat: " << object.pose.orientation << '\n';
         // get min max points coords
         Eigen::Vector4f min_vals, max_vals;
         pcl::getMinMax3D(*cloud_cluster, min_vals, max_vals);
@@ -598,7 +601,7 @@ class PointCloudProc{
     pcl::ExtractIndices<PointT> extract_;
     pcl::ConvexHull<PointT> chull_;
     pcl::ExtractPolygonalPrismData<PointT> prism_;
-    pcl::EuclideanClusterExtraction<PointT> ec_;
+      pcl::EuclideanClusterExtraction<PointT> ec_;
     // pcl::ModelOutlierRemoval<PointT> model_filter_;
 
     bool debug_, use_voxel;
