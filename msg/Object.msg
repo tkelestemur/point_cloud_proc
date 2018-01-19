@@ -8,4 +8,6 @@ geometry_msgs/Vector3 min
 
 geometry_msgs/Vector3 max
 
-sensor_msgs/PointCloud2 cloud
+geometry_msgs/Vector3[] points
+
+geometry_msgs/Vector3[] normals
