@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
 
   ros::Duration(1.0).sleep();
 
-  ros::Rate rate(100.0);
+  ros::Rate rate(200.0);
   while (n.ok()){
     tf::StampedTransform transform;
     try{
