@@ -568,7 +568,7 @@ class PointCloudProc{
       return true;
     }
 
-    ROS_INFO("Tabletop cloud is segmented segmented!");
+    ROS_INFO("Tabletop cloud is extracted!");
     res.object_cluster = tabletop_cloud_;
     res.success = true;
     return true;
