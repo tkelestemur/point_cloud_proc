@@ -237,7 +237,7 @@ class PointCloudProc{
       //   // Construct plane object msg
         point_cloud_proc::Planes plane_object_msgs;
         point_cloud_proc::Plane plane_object_msg;
-        int MIN_PLANE_SIZE = 1000;
+        int MIN_PLANE_SIZE = 10000;
         int no_planes = 0;
         CloudT::Ptr cloud_plane (new CloudT);
         CloudT::Ptr cloud_hull (new CloudT);
@@ -249,7 +249,7 @@ class PointCloudProc{
         seg_.setMaxIterations(200);
         seg_.setMethodType (pcl::SAC_RANSAC);
         seg_.setAxis(axis);
-        seg_.setEpsAngle(25.0f * (M_PI/180.0f));
+        seg_.setEpsAngle(5.0f * (M_PI/180.0f));
         seg_.setDistanceThreshold (0.01);
 
         while(true) {
