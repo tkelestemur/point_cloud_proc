@@ -114,6 +114,7 @@ include_directories(
 
 add_executable(point_cloud_proc src/point_cloud_proc.cpp)
 target_link_libraries(point_cloud_proc ${catkin_LIBRARIES})
+add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} point_cloud_proc_generate_messages_cpp)
 
 add_executable(point_cloud_frame_pub src/point_cloud_frame_pub.cpp)
 target_link_libraries(point_cloud_frame_pub ${catkin_LIBRARIES})
