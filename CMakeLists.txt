@@ -62,9 +62,9 @@ generate_messages(DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
- # INCLUDE_DIRS include
- # LIBRARIES point_cloud_tools
- CATKIN_DEPENDS message_runtime geometry_msgs std_msgs pcl_ros roscpp rospy sensor_msgs tf
+  INCLUDE_DIRS include
+  LIBRARIES point_cloud_proc
+  CATKIN_DEPENDS message_runtime geometry_msgs std_msgs pcl_ros roscpp rospy sensor_msgs tf
 # DEPENDS PCL
 )
 
@@ -84,24 +84,18 @@ catkin_package(
 # ## Specify additional locations of header files
 # ## Your package locations should be listed before other locations
 include_directories(
-	# include
+	include
 	# SYSTEM
  	${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/point_cloud_tools.cpp
-# )
-#
-# target_link_libraries(${PROJECT_NAME}
-#   # ${Boost_LIBRARIES}
-#   ${catkin_LIBRARIES}
-#   ${PCL_LIBRARIES}
-# )
-
-# add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+add_library(${PROJECT_NAME}
+	src/point_cloud_proc.cpp
+)
+target_link_libraries(point_cloud_proc ${catkin_LIBRARIES})
+add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} point_cloud_proc_generate_messages_cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -112,21 +106,18 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 
-add_executable(point_cloud_proc src/point_cloud_proc.cpp)
-target_link_libraries(point_cloud_proc ${catkin_LIBRARIES})
-add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} point_cloud_proc_generate_messages_cpp)
-
 add_executable(point_cloud_frame_pub src/point_cloud_frame_pub.cpp)
 target_link_libraries(point_cloud_frame_pub ${catkin_LIBRARIES})
 
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-# set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
 
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+#############
+## Install ##
+#############
+install(TARGETS ${PROJECT_NAME}
+	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+	RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+)
 
-## Specify libraries to link a library or executable target against
+install(DIRECTORY include/${PROJECT_NAME}/
+	DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
