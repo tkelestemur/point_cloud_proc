@@ -64,7 +64,6 @@ private:
     pcl::ConvexHull<PointT> chull_;
     pcl::ExtractPolygonalPrismData<PointT> prism_;
     pcl::EuclideanClusterExtraction<PointT> ec_;
-    // pcl::ModelOutlierRemoval<PointT> model_filter_;
 
     int k_search_;
     bool debug_, use_voxel;
@@ -99,16 +98,6 @@ public:
     void segmentMultiplePlane(bool create_srv_res);
     bool extractTabletop();
     bool clusterObjects();
-    bool segmentSinglePlaneServiceCb(point_cloud_proc::SinglePlaneSegmentation::Request &req,
-                                     point_cloud_proc::SinglePlaneSegmentation::Response &res);
-    bool segmentMultiplePlaneServiceCb(point_cloud_proc::MultiPlaneSegmentation::Request &req,
-                                       point_cloud_proc::MultiPlaneSegmentation::Response &res);
-    bool extractTabletopServiceCb(point_cloud_proc::TabletopExtraction::Request &req,
-                                  point_cloud_proc::TabletopExtraction::Response &res);
-    bool clusterTabletopObjectsServiceCb(point_cloud_proc::TabletopClustering::Request &req,
-                                         point_cloud_proc::TabletopClustering::Response &res);
-
-
 };
 
 #endif //POINT_CLOUD_PROC_H
