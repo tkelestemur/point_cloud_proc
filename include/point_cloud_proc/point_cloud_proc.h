@@ -8,9 +8,11 @@
 #include <sensor_msgs/image_encodings.h>
 #include <std_srvs/Empty.h>
 #include <tf/transform_listener.h>
+#include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <point_cloud_proc/Planes.h>
+#include <point_cloud_proc/Object.h>
 #include <point_cloud_proc/Objects.h>
 #include <point_cloud_proc/SinglePlaneSegmentation.h>
 #include <point_cloud_proc/MultiPlaneSegmentation.h>
@@ -47,6 +49,7 @@
 // Other
 #include <boost/thread/mutex.hpp>
 #include <boost/scoped_ptr.hpp>
+#include <boost/thread/thread.hpp>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
@@ -66,38 +69,33 @@ private:
     pcl::EuclideanClusterExtraction<PointT> ec_;
 
     int k_search_;
-    bool debug_, use_voxel;
-    float leaf_size_, cluster_tol_, normal_radius_;
+    bool debug_;
+    float cluster_tol_, leaf_size_;
     std::vector<float> pass_limits_, prism_limits_;
     std::string point_cloud_topic_, fixed_frame_;
-    CloudT::ConstPtr cloud_raw_;
+//    CloudT::ConstPtr cloud_raw_;
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
-    sensor_msgs::PointCloud2 tabletop_cloud_;
-    pcl::PointIndices::Ptr object_indices_;
+    sensor_msgs::PointCloud2 cloud_raw_ros_;
 
     boost::mutex pc_mutex_;
+//    boost::thread transform_br_thread_;
 
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
-    ros::Publisher table_cloud_pub_, plane_polygon_pub_;
-    ros::Publisher multi_object_pub_, single_object_pub_, single_object_image_pub_;
-    ros::ServiceServer extract_tabletop_srv_, cluster_tabletop_srv_;
-    ros::ServiceServer segment_multiple_plane_srv_, segment_single_plane_srv_;
-    tf::TransformListener listener_;
+    ros::Publisher table_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
 
-    point_cloud_proc::Plane plane_object_;
-    point_cloud_proc::Planes plane_objects_;
-    point_cloud_proc::Objects tabletop_objects_;
 
 public:
     PointCloudProc(ros::NodeHandle n);
-    void pointCloudCb(const CloudT::ConstPtr &msg);
+    void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
+//    void transformBroadcasterThread();
+//    void startThreads();
     bool transformPointCloud();
-    bool filterPointCloud(bool use_voxel);
-    bool segmentSinglePlane(bool create_srv_res);
-    void segmentMultiplePlane(bool create_srv_res);
+    bool filterPointCloud();
+    bool segmentSinglePlane(point_cloud_proc::Plane& plane);
+    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
+    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
     bool extractTabletop();
-    bool clusterObjects();
 };
 
 #endif //POINT_CLOUD_PROC_H

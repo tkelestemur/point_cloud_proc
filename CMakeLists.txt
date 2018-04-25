@@ -10,12 +10,12 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
 	message_generation
 	geometry_msgs
-  sensor_msgs
+    sensor_msgs
 	std_msgs
-  pcl_ros
-  roscpp
-  rospy
-  tf
+    pcl_ros
+    roscpp
+    rospy
+    tf
 )
 
 ## Generate messages in the 'msg' folder
@@ -24,20 +24,20 @@ add_message_files(
 	FILES
 	Object.msg
 	Objects.msg
-  Plane.msg
+    Plane.msg
 	Planes.msg
 )
 
 
 ## Generate services in the 'srv' folder
-add_service_files(
-	DIRECTORY srv
-	FILES
-  SinglePlaneSegmentation.srv
-	MultiPlaneSegmentation.srv
-	TabletopExtraction.srv
-	TabletopClustering.srv
-)
+#add_service_files(
+#	DIRECTORY srv
+#	FILES
+#    SinglePlaneSegmentation.srv
+#	MultiPlaneSegmentation.srv
+#	TabletopExtraction.srv
+#	TabletopClustering.srv
+#)
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
 
@@ -87,7 +87,7 @@ include_directories(
 	include
 	# SYSTEM
  	${catkin_INCLUDE_DIRS}
-  ${PCL_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -106,18 +106,15 @@ add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_E
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 
-add_executable(point_cloud_frame_pub src/point_cloud_frame_pub.cpp)
-target_link_libraries(point_cloud_frame_pub ${catkin_LIBRARIES})
-
 
 #############
 ## Install ##
 #############
-install(TARGETS ${PROJECT_NAME}
-	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-)
-
-install(DIRECTORY include/${PROJECT_NAME}/
-	DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+#install(TARGETS ${PROJECT_NAME}
+#	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#	RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+#)
+#
+#install(DIRECTORY include/${PROJECT_NAME}/
+#	DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

@@ -3,48 +3,107 @@
 PointCloudProc::PointCloudProc(ros::NodeHandle n) :
         nh_(n), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
         cloud_hull_(new CloudT), cloud_tabletop_(new CloudT) {
-    debug_ = false;
-    k_search_ = 50;
+
+    debug_ = true;
     leaf_size_ = 0.01;
+    k_search_ = 50;
     cluster_tol_ = 0.03;
-    normal_radius_ = 0.03;
-    pass_limits_ = {-2.0, 2.0, -2.0, 2.0, -2.0, 2.0};
-    prism_limits_ = {0.0, 0.05};
-    point_cloud_topic_ = "/hsrb/head_rgbd_sensor/depth_registered/points";
-    fixed_frame_ = "/base_link";
+    pass_limits_ = {-2.0, 2.0, -2.0, 2.0, 0.2, 2.0};
+    prism_limits_ = {-0.25, -0.02};
+    point_cloud_topic_ = "/hsrb/head_rgbd_sensor/depth_registered/rectified_points";
+    fixed_frame_ = "base_link";
 
-    nh_.getParam("/point_cloud_debug", debug_);
-    nh_.getParam("/filters/leaf_size", leaf_size_);
-    nh_.getParam("/filters/pass_limits", pass_limits_);
-    nh_.getParam("/filters/normal_radius", normal_radius_);
-    nh_.getParam("/filters/k_search", k_search_);
-    nh_.getParam("/segmentation/prism_limits", prism_limits_);
-    nh_.getParam("/segmentation/cluster_tolerance", cluster_tol_);
-    nh_.getParam("/point_cloud_topic", point_cloud_topic_);
-    nh_.getParam("/fixed_frame", fixed_frame_);
+//    nh_.getParam("/point_cloud_debug", debug_);
+//    nh_.getParam("/filters/pass_limits", pass_limits_);
+//    nh_.getParam("/filters/k_search", k_search_);
+//    nh_.getParam("/segmentation/prism_limits", prism_limits_);
+//    nh_.getParam("/segmentation/cluster_tolerance", cluster_tol_);
+//    nh_.getParam("/point_cloud_topic_name", point_cloud_topic_);
+//    nh_.getParam("/point_cloud_frame", fixed_frame_);
 
-    point_cloud_sub_ = nh_.subscribe<CloudT> (point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
+    point_cloud_sub_ = nh_.subscribe(point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
 
     if (debug_) {
         table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
-        multi_object_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
-        plane_polygon_pub_ = nh_.advertise<geometry_msgs::PolygonStamped>("plane_polygon", 10);
+        debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
+        tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
+
     }
 }
 
-void PointCloudProc::pointCloudCb(const CloudT::ConstPtr &msg) {
+//void PointCloudProc::pointCloudCb(const CloudT::ConstPtr &msg) {
+//    boost::mutex::scoped_lock lock(pc_mutex_);
+//    cloud_raw_ = msg;
+//}
 
-      boost::mutex::scoped_lock lock(pc_mutex_);
-      cloud_raw_ = msg;
+void PointCloudProc::pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg) {
+  boost::mutex::scoped_lock lock(pc_mutex_);
+  cloud_raw_ros_ = *msg;
 }
+
+//void PointCloudProc::transformBroadcasterThread() {
+//    tf::TransformListener listener;
+//    tf::TransformBroadcaster br;
+//
+//    listener.waitForTransform("base_link", "head_pan_link", ros::Time::now(), ros::Duration(2.0));
+//
+//    ros::Rate rate(100.0);
+//    while (nh_.ok()){
+//      tf::StampedTransform transform;
+//      try{
+//        listener.lookupTransform("base_link", "head_pan_link", ros::Time(0), transform);
+////        tf::Transform cloud_frame;
+//        cloud_frame_.setOrigin( tf::Vector3(0.0, 0.0, 0.0) );
+//        cloud_frame_.setRotation(transform.getRotation());
+////        br.sendTransform(tf::StampedTransform(cloud_frame, ros::Time::now(), "base_link", "point_cloud_frame"));
+//      }
+//      catch (tf::TransformException ex){
+//        ROS_ERROR("%s",ex.what());
+//        ros::Duration(1.0).sleep();
+//      }
+//      rate.sleep();
+//    }
+//
+//}
+//
+//
+//void PointCloudProc::startThreads() {
+//  transform_br_thread_ = boost::thread(&PointCloudProc::transformBroadcasterThread, this);
+//
+//}
 
 bool PointCloudProc::transformPointCloud() {
+    boost::mutex::scoped_lock lock(pc_mutex_);
 
-    bool transform_success = pcl_ros::transformPointCloud(fixed_frame_, *cloud_raw_, *cloud_transformed_, listener_);
-    return transform_success;
+    tf::TransformListener listener;
+    std::string target_frame = cloud_raw_ros_.header.frame_id; //
+
+    listener.waitForTransform(fixed_frame_, target_frame, ros::Time(0), ros::Duration(2.0));
+    tf::StampedTransform transform;
+    tf::Transform cloud_transform;
+
+    try{
+      listener.lookupTransform(fixed_frame_, target_frame, ros::Time(0), transform);
+      cloud_transform.setOrigin(transform.getOrigin());
+      cloud_transform.setRotation(transform.getRotation());
+
+      sensor_msgs::PointCloud2 cloud_transformed;
+      pcl_ros::transformPointCloud(fixed_frame_, cloud_transform, cloud_raw_ros_, cloud_transformed);
+
+      pcl::fromROSMsg(cloud_transformed, *cloud_transformed_);
+
+      return true;
+
+    }
+    catch (tf::TransformException ex){
+      ROS_ERROR("%s",ex.what());
+      return false;
+    }
+
+
 }
 
-bool PointCloudProc::filterPointCloud(bool use_voxel=true) {
+bool PointCloudProc::filterPointCloud() {
 
     // Remove part of the scene to leave table and objects alone
     pass_.setInputCloud (cloud_transformed_);
@@ -60,15 +119,35 @@ bool PointCloudProc::filterPointCloud(bool use_voxel=true) {
     pass_.setFilterLimits (pass_limits_[4],  pass_limits_[5]);
     pass_.filter(*cloud_filtered_);
 
-    ROS_INFO("Point cloud is filtered!");
+    std::cout << "point cloud is filtered!" << std::endl;
     if (cloud_filtered_->points.size() == 0) {
         ROS_WARN("Point cloud is empty after filtering!");
         return false;
     }
+
+  // Downsample point cloud
+//   vg_.setInputCloud (cloud_filtered_);
+//   vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
+//   vg_.filter (*cloud_filtered_);
+
     return true;
 }
 
-bool PointCloudProc::segmentSinglePlane(bool create_srv_res) {
+bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
+//    boost::mutex::scoped_lock lock(pc_mutex_);
+    std::cout << "segmenting single plane..." << std::endl;
+
+    if(!transformPointCloud()){
+      std::cout << "couldn't transform point cloud!" << std::endl;
+      return false;
+    }
+
+    if(!filterPointCloud()){
+      std::cout << "couldn't filter point cloud!" << std::endl;
+      return false;
+    }
+
+
 
     CloudT::Ptr cloud_plane (new CloudT);
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
@@ -85,76 +164,87 @@ bool PointCloudProc::segmentSinglePlane(bool create_srv_res) {
     seg_.segment (*inliers, *coefficients);
 
 
-    if (inliers->indices.size() == 0)
-        return false;
+    if (inliers->indices.size() == 0){
+      std::cout << "plane is empty!" << std::endl;
+      return false;
+    }
 
 
     extract_.setInputCloud (cloud_filtered_);
     extract_.setNegative(false);
     extract_.setIndices (inliers);
     extract_.filter (*cloud_plane);
-    ROS_INFO_STREAM("# of points in plane: " << cloud_plane->points.size());
+    std::cout << "# of points in plane: " << cloud_plane->points.size() << std::endl;
 
-    if (debug_)
-        table_cloud_pub_.publish(cloud_plane);
+    if (debug_) {
+      table_cloud_pub_.publish(cloud_plane);
+    }
 
     chull_.setInputCloud (cloud_plane);
     chull_.setDimension(2);
     chull_.reconstruct (*cloud_hull_);
 
-    if (create_srv_res) {
-        // Construct plane object msg
-        point_cloud_proc::Plane plane_object_msg;
 
-        pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
+    // Construct plane object msg
+    pcl_conversions::fromPCL(cloud_plane->header, plane.header);
 
+    // Get plane center
+    Eigen::Vector4f center;
+    pcl::compute3DCentroid(*cloud_plane, center);
+    plane.center.x = center[0];
+    plane.center.y = center[1];
+    plane.center.z = center[2];
 
-        // Get plane center
-        Eigen::Vector4f center;
-        pcl::compute3DCentroid(*cloud_plane, center);
-        plane_object_msg.center.x = center[0];
-        plane_object_msg.center.y = center[1];
-        plane_object_msg.center.z = center[2];
+    // Get plane min and max values
+    Eigen::Vector4f min_vals, max_vals;
+    pcl::getMinMax3D(*cloud_plane, min_vals, max_vals);
 
-        // Get plane min and max values
-        Eigen::Vector4f min_vals, max_vals;
-        pcl::getMinMax3D(*cloud_plane, min_vals, max_vals);
-
-        plane_object_msg.min.x = min_vals[0];
-        plane_object_msg.min.y = min_vals[1];
-        plane_object_msg.min.z = min_vals[2];
+    plane.min.x = min_vals[0];
+    plane.min.y = min_vals[1];
+    plane.min.z = min_vals[2];
 
 
-        plane_object_msg.max.x = max_vals[0];
-        plane_object_msg.max.y = max_vals[1];
-        plane_object_msg.max.z = max_vals[2];
+    plane.max.x = max_vals[0];
+    plane.max.y = max_vals[1];
+    plane.max.z = max_vals[2];
 
-        // Get plane polygon
-        for (int i = 0; i < cloud_hull_->points.size (); i++) {
-            geometry_msgs::Point32 p;
-            p.x = cloud_hull_->points[i].x;
-            p.y = cloud_hull_->points[i].y;
-            p.z = cloud_hull_->points[i].z;
+    // Get plane polygon
+    for (int i = 0; i < cloud_hull_->points.size (); i++) {
+        geometry_msgs::Point32 p;
+        p.x = cloud_hull_->points[i].x;
+        p.y = cloud_hull_->points[i].y;
+        p.z = cloud_hull_->points[i].z;
 
-            plane_object_msg.polygon.push_back(p);
-        }
-
-        // Get plane coefficients
-        plane_object_msg.coef[0] = coefficients->values[0];
-        plane_object_msg.coef[1] = coefficients->values[1];
-        plane_object_msg.coef[2] = coefficients->values[2];
-        plane_object_msg.coef[3] = coefficients->values[3];
-
-        plane_object_msg.size.data = cloud_plane->points.size();
-        plane_object_msg.is_horizontal = true;
-        plane_object_ = plane_object_msg;
+        plane.polygon.push_back(p);
     }
+
+    // Get plane coefficients
+    plane.coef[0] = coefficients->values[0];
+    plane.coef[1] = coefficients->values[1];
+    plane.coef[2] = coefficients->values[2];
+    plane.coef[3] = coefficients->values[3];
+
+    plane.size.data = cloud_plane->points.size();
+    plane.is_horizontal = true;
+
     return true;
 }
 
-void PointCloudProc::segmentMultiplePlane(bool create_srv_res) {
-    // Construct plane object msg
-    point_cloud_proc::Planes plane_object_msgs;
+bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes) {
+
+//    boost::mutex::scoped_lock lock(pc_mutex_);
+
+    if(!transformPointCloud()){
+      std::cout << "couldn't transform point cloud!" << std::endl;
+      return false;
+    }
+
+    if(!filterPointCloud()){
+      std::cout << "couldn't filter point cloud!" << std::endl;
+      return false;
+    }
+
+
     point_cloud_proc::Plane plane_object_msg;
     int MIN_PLANE_SIZE = 10000;
     int no_planes = 0;
@@ -177,15 +267,17 @@ void PointCloudProc::segmentMultiplePlane(bool create_srv_res) {
         seg_.segment (*inliers, *coefficients);
 
         if (inliers->indices.size() == 0 and no_planes == 0) {
-            ROS_INFO("No plane found!"); // TODO: return false;
-            break;
+            std::cout <<  "no plane found!!!" << std::endl; // TODO: return false;
+//            break;
+            return false;
         }
+
         else if (inliers->indices.size() < MIN_PLANE_SIZE) {
             break;
         }
         else {
-            ROS_INFO_STREAM(no_planes+1 << ". plane segmented!");
-            ROS_INFO_STREAM("Plane size : " << inliers->indices.size());
+            std::cout << no_planes+1 << ". plane segmented!" << std::endl;
+          std::cout << "plane size : " << inliers->indices.size() << std::endl;
             no_planes++;
         }
 
@@ -208,51 +300,49 @@ void PointCloudProc::segmentMultiplePlane(bool create_srv_res) {
         Eigen::Vector4f min_vals, max_vals;
         pcl::getMinMax3D(*cloud_plane, min_vals, max_vals);
 
-        if (create_srv_res) {
-            // Construct plane object msg
-            pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
 
-            // Get plane center
-            plane_object_msg.center.x = center[0];
-            plane_object_msg.center.y = center[1];
-            plane_object_msg.center.z = center[2];
+        // Construct plane object msg
+        pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
 
-            // Get plane min and max values
-            plane_object_msg.min.x = min_vals[0];
-            plane_object_msg.min.y = min_vals[1];
-            plane_object_msg.min.z = min_vals[2];
+        // Get plane center
+        plane_object_msg.center.x = center[0];
+        plane_object_msg.center.y = center[1];
+        plane_object_msg.center.z = center[2];
+
+        // Get plane min and max values
+        plane_object_msg.min.x = min_vals[0];
+        plane_object_msg.min.y = min_vals[1];
+        plane_object_msg.min.z = min_vals[2];
 
 
-            plane_object_msg.max.x = max_vals[0];
-            plane_object_msg.max.y = max_vals[1];
-            plane_object_msg.max.z = max_vals[2];
+        plane_object_msg.max.x = max_vals[0];
+        plane_object_msg.max.y = max_vals[1];
+        plane_object_msg.max.z = max_vals[2];
 
-            // Get plane polygon
-            for (int i = 0; i < cloud_hull->points.size (); i++) {
-                geometry_msgs::Point32 p;
-                p.x = cloud_hull->points[i].x;
-                p.y = cloud_hull->points[i].y;
-                p.z = cloud_hull->points[i].z;
-                plane_object_msg.polygon.push_back(p);
-            }
-
-            // Get plane coefficients
-            plane_object_msg.coef[0] = coefficients->values[0];
-            plane_object_msg.coef[1] = coefficients->values[1];
-            plane_object_msg.coef[2] = coefficients->values[2];
-            plane_object_msg.coef[3] = coefficients->values[3];
-
-            plane_object_msg.size.data = cloud_plane->points.size();
-            plane_object_msg.is_horizontal = true;
-
-            plane_object_msgs.objects.push_back(plane_object_msg);
-            extract_.setNegative(true);
-            extract_.filter(*cloud_filtered_);
+        // Get plane polygon
+        for (int i = 0; i < cloud_hull->points.size (); i++) {
+            geometry_msgs::Point32 p;
+            p.x = cloud_hull->points[i].x;
+            p.y = cloud_hull->points[i].y;
+            p.z = cloud_hull->points[i].z;
+            plane_object_msg.polygon.push_back(p);
         }
 
-        if (create_srv_res)
-            plane_objects_ = plane_object_msgs;
+        // Get plane coefficients
+        plane_object_msg.coef[0] = coefficients->values[0];
+        plane_object_msg.coef[1] = coefficients->values[1];
+        plane_object_msg.coef[2] = coefficients->values[2];
+        plane_object_msg.coef[3] = coefficients->values[3];
+
+        plane_object_msg.size.data = cloud_plane->points.size();
+        plane_object_msg.is_horizontal = true;
+
+        planes.push_back(plane_object_msg);
+        extract_.setNegative(true);
+        extract_.filter(*cloud_filtered_);
+
     }
+    return true;
 }
 
 bool PointCloudProc::extractTabletop() {
@@ -271,17 +361,17 @@ bool PointCloudProc::extractTabletop() {
         return false;
     }
     else {
-        if (debug_)
-            multi_object_pub_.publish(cloud_tabletop_);
-
-        toROSMsg(*cloud_tabletop_, tabletop_cloud_);
+        if (debug_) {
+          tabletop_pub_.publish(cloud_tabletop_);
+        }
         return true;
     }
 }
 
-bool PointCloudProc::clusterObjects() {
+bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objects) {
 
-    tabletop_objects_.objects.clear();
+    extractTabletop();
+
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
 
     tree->setInputCloud (cloud_tabletop_);
@@ -301,7 +391,7 @@ bool PointCloudProc::clusterObjects() {
     if (cluster_indices.size() == 0)
         return false;
     else
-      ROS_INFO_STREAM("Number of objects: " << cluster_indices.size());
+      std::cout << "number of objects: " << cluster_indices.size() << std::endl;
 
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
 
@@ -385,9 +475,9 @@ bool PointCloudProc::clusterObjects() {
         object.max.z = max_vals[2];
 
         k++;
-        ROS_INFO_STREAM("# of points in object " << k << " : " << cluster->points.size());
+        std::cout << "number of points in object " << k << " : " << cluster->points.size() << std::endl;
 
-        tabletop_objects_.objects.push_back(object);
+        objects.push_back(object);
     }
     return true;
 }
