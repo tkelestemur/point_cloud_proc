@@ -73,12 +73,11 @@ private:
     float cluster_tol_, leaf_size_;
     std::vector<float> pass_limits_, prism_limits_;
     std::string point_cloud_topic_, fixed_frame_;
-//    CloudT::ConstPtr cloud_raw_;
+
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
     sensor_msgs::PointCloud2 cloud_raw_ros_;
 
     boost::mutex pc_mutex_;
-//    boost::thread transform_br_thread_;
 
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
@@ -88,8 +87,7 @@ private:
 public:
     PointCloudProc(ros::NodeHandle n);
     void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
-//    void transformBroadcasterThread();
-//    void startThreads();
+
     bool transformPointCloud();
     bool filterPointCloud();
     bool segmentSinglePlane(point_cloud_proc::Plane& plane);

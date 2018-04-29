@@ -1,14 +1,13 @@
 #include <point_cloud_proc/point_cloud_proc.h>
 
 PointCloudProc::PointCloudProc(ros::NodeHandle n) :
-        nh_(n), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
+        nh_(n), debug_(false), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
         cloud_hull_(new CloudT), cloud_tabletop_(new CloudT) {
 
-    debug_ = true;
     leaf_size_ = 0.01;
     k_search_ = 50;
     cluster_tol_ = 0.03;
-    pass_limits_ = {-2.0, 2.0, -2.0, 2.0, 0.2, 2.0};
+    pass_limits_ = {-0.2, 1.5, -1.5, 1.5, 0.2, 2.0};
     prism_limits_ = {-0.25, -0.02};
     point_cloud_topic_ = "/hsrb/head_rgbd_sensor/depth_registered/rectified_points";
     fixed_frame_ = "base_link";
@@ -75,6 +74,8 @@ void PointCloudProc::pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg) {
 bool PointCloudProc::transformPointCloud() {
     boost::mutex::scoped_lock lock(pc_mutex_);
 
+    cloud_transformed_->clear();
+
     tf::TransformListener listener;
     std::string target_frame = cloud_raw_ros_.header.frame_id; //
 
@@ -119,9 +120,9 @@ bool PointCloudProc::filterPointCloud() {
     pass_.setFilterLimits (pass_limits_[4],  pass_limits_[5]);
     pass_.filter(*cloud_filtered_);
 
-    std::cout << "point cloud is filtered!" << std::endl;
+    std::cout << "PCP: point cloud is filtered!" << std::endl;
     if (cloud_filtered_->points.size() == 0) {
-        ROS_WARN("Point cloud is empty after filtering!");
+        std::cout <<  "PCP: point cloud is empty after filtering!" << std::endl;
         return false;
     }
 
@@ -135,15 +136,15 @@ bool PointCloudProc::filterPointCloud() {
 
 bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
 //    boost::mutex::scoped_lock lock(pc_mutex_);
-    std::cout << "segmenting single plane..." << std::endl;
+    std::cout << "PCP: segmenting single plane..." << std::endl;
 
     if(!transformPointCloud()){
-      std::cout << "couldn't transform point cloud!" << std::endl;
+      std::cout << "PCP: couldn't transform point cloud!" << std::endl;
       return false;
     }
 
     if(!filterPointCloud()){
-      std::cout << "couldn't filter point cloud!" << std::endl;
+      std::cout << "PCP: couldn't filter point cloud!" << std::endl;
       return false;
     }
 
@@ -165,7 +166,7 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
 
 
     if (inliers->indices.size() == 0){
-      std::cout << "plane is empty!" << std::endl;
+      std::cout << "PCP: plane is empty!" << std::endl;
       return false;
     }
 
@@ -174,12 +175,13 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
     extract_.setNegative(false);
     extract_.setIndices (inliers);
     extract_.filter (*cloud_plane);
-    std::cout << "# of points in plane: " << cloud_plane->points.size() << std::endl;
 
     if (debug_) {
+      std::cout << "PCP: # of points in plane: " << cloud_plane->points.size() << std::endl;
       table_cloud_pub_.publish(cloud_plane);
     }
 
+    cloud_hull_->clear();
     chull_.setInputCloud (cloud_plane);
     chull_.setDimension(2);
     chull_.reconstruct (*cloud_hull_);
@@ -235,18 +237,18 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
 //    boost::mutex::scoped_lock lock(pc_mutex_);
 
     if(!transformPointCloud()){
-      std::cout << "couldn't transform point cloud!" << std::endl;
+      std::cout << "PCP: couldn't transform point cloud!" << std::endl;
       return false;
     }
 
     if(!filterPointCloud()){
-      std::cout << "couldn't filter point cloud!" << std::endl;
+      std::cout << "PCP: couldn't filter point cloud!" << std::endl;
       return false;
     }
 
 
     point_cloud_proc::Plane plane_object_msg;
-    int MIN_PLANE_SIZE = 10000;
+    int MIN_PLANE_SIZE = 5000;
     int no_planes = 0;
     CloudT::Ptr cloud_plane (new CloudT);
     CloudT::Ptr cloud_hull (new CloudT);
@@ -257,7 +259,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     seg_.setMaxIterations(200);
     seg_.setMethodType (pcl::SAC_RANSAC);
     seg_.setAxis(axis);
-    seg_.setEpsAngle(5.0f * (M_PI/180.0f));
+    seg_.setEpsAngle(15.0f * (M_PI/180.0f));
     seg_.setDistanceThreshold (0.01);
 
     while(true) {
@@ -267,7 +269,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         seg_.segment (*inliers, *coefficients);
 
         if (inliers->indices.size() == 0 and no_planes == 0) {
-            std::cout <<  "no plane found!!!" << std::endl; // TODO: return false;
+            std::cout <<  "PCP: no plane found!!!" << std::endl; // TODO: return false;
 //            break;
             return false;
         }
@@ -276,8 +278,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
             break;
         }
         else {
-            std::cout << no_planes+1 << ". plane segmented!" << std::endl;
-          std::cout << "plane size : " << inliers->indices.size() << std::endl;
+            std::cout << "PCP: " <<no_planes+1 << ". plane segmented! plane size: " << inliers->indices.size() << std::endl;
             no_planes++;
         }
 
@@ -350,7 +351,7 @@ bool PointCloudProc::extractTabletop() {
     pcl::PointIndices::Ptr tabletop_indices(new pcl::PointIndices);
     prism_.setInputCloud(cloud_filtered_);
     prism_.setInputPlanarHull(cloud_hull_);
-    prism_.setHeightLimits(prism_limits_[0], prism_limits_[1]); // Height limits
+    prism_.setHeightLimits(prism_limits_[0], prism_limits_[1]);
     prism_.segment(*tabletop_indices);
 
     extract_.setInputCloud (cloud_filtered_);
@@ -370,7 +371,9 @@ bool PointCloudProc::extractTabletop() {
 
 bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objects) {
 
-    extractTabletop();
+    if (!extractTabletop()){
+      return false;
+    }
 
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
 
@@ -391,7 +394,7 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
     if (cluster_indices.size() == 0)
         return false;
     else
-      std::cout << "number of objects: " << cluster_indices.size() << std::endl;
+      std::cout << "PCP: number of objects: " << cluster_indices.size() << std::endl;
 
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
 
@@ -475,7 +478,10 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
         object.max.z = max_vals[2];
 
         k++;
-        std::cout << "number of points in object " << k << " : " << cluster->points.size() << std::endl;
+        if(debug_){
+          std::cout << "PCP: number of points in object " << k << " : " << cluster->points.size() << std::endl;
+        }
+
 
         objects.push_back(object);
     }
