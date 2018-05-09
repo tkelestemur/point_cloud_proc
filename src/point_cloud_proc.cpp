@@ -1,7 +1,7 @@
 #include <point_cloud_proc/point_cloud_proc.h>
 
-PointCloudProc::PointCloudProc(ros::NodeHandle n) :
-        nh_(n), debug_(false), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
+PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
+        nh_(n), debug_(debug), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
         cloud_hull_(new CloudT), cloud_tabletop_(new CloudT) {
 
     leaf_size_ = 0.01;
@@ -22,10 +22,12 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n) :
 
     point_cloud_sub_ = nh_.subscribe(point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
 
+
     if (debug_) {
         table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
         debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
         tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
+
 
     }
 }
@@ -38,6 +40,9 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n) :
 void PointCloudProc::pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg) {
   boost::mutex::scoped_lock lock(pc_mutex_);
   cloud_raw_ros_ = *msg;
+//  sensor_msgs::Image img;
+//  pcl::toROSMsg(*msg, img);
+//  test_img_pub_.publish(img);
 }
 
 //void PointCloudProc::transformBroadcasterThread() {
@@ -270,7 +275,6 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
 
         if (inliers->indices.size() == 0 and no_planes == 0) {
             std::cout <<  "PCP: no plane found!!!" << std::endl; // TODO: return false;
-//            break;
             return false;
         }
 
@@ -486,4 +490,25 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
         objects.push_back(object);
     }
     return true;
+}
+
+bool PointCloudProc::get3DPoint(int col, int row, geometry_msgs::PointStamped &point) {
+
+  if(!transformPointCloud()){
+    std::cout << "PCP: couldn't transform point cloud!" << std::endl;
+    return false;
+  }
+
+  pcl_conversions::fromPCL(cloud_transformed_->header, point.header);
+
+  if (pcl::isFinite(cloud_transformed_->at(col, row))) {
+    point.point.x = cloud_transformed_->at(col, row).x;
+    point.point.y = cloud_transformed_->at(col, row).y;
+    point.point.z = cloud_transformed_->at(col, row).z;
+    return true;
+  }else{
+    std::cout << "PCP: The 3D point is not valid!" << std::endl;
+    return false;
+  }
+
 }

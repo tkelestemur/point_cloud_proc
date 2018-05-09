@@ -30,14 +30,14 @@ add_message_files(
 
 
 ## Generate services in the 'srv' folder
-#add_service_files(
-#	DIRECTORY srv
-#	FILES
-#    SinglePlaneSegmentation.srv
-#	MultiPlaneSegmentation.srv
-#	TabletopExtraction.srv
-#	TabletopClustering.srv
-#)
+add_service_files(
+	DIRECTORY srv
+	FILES
+    SinglePlaneSegmentation.srv
+	MultiPlaneSegmentation.srv
+	TabletopExtraction.srv
+	TabletopClustering.srv
+)
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
 
@@ -91,11 +91,12 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}
-	src/point_cloud_proc.cpp
-)
+add_library(${PROJECT_NAME} src/point_cloud_proc.cpp)
 target_link_libraries(point_cloud_proc ${catkin_LIBRARIES})
 add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} point_cloud_proc_generate_messages_cpp)
+
+add_executable(test_pcp src/test_pcp.cpp)
+target_link_libraries(test_pcp point_cloud_proc ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

@@ -59,6 +59,19 @@ class PointCloudProc{
     typedef pcl::PointCloud<PointT> CloudT;
     typedef pcl::PointCloud<PointNT> CloudNT;
 
+
+public:
+    PointCloudProc(ros::NodeHandle n, bool debug=false);
+    void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
+
+    bool transformPointCloud();
+    bool filterPointCloud();
+    bool segmentSinglePlane(point_cloud_proc::Plane& plane);
+    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
+    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
+    bool extractTabletop();
+    bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
+
 private:
     pcl::PassThrough<PointT> pass_;
     pcl::VoxelGrid<PointT> vg_;
@@ -84,16 +97,7 @@ private:
     ros::Publisher table_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
 
 
-public:
-    PointCloudProc(ros::NodeHandle n);
-    void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
 
-    bool transformPointCloud();
-    bool filterPointCloud();
-    bool segmentSinglePlane(point_cloud_proc::Plane& plane);
-    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
-    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
-    bool extractTabletop();
 };
 
 #endif //POINT_CLOUD_PROC_H
