@@ -139,6 +139,15 @@ bool PointCloudProc::filterPointCloud() {
     return true;
 }
 
+bool PointCloudProc::removeOutliers(CloudT::Ptr in, CloudT::Ptr out) {
+
+  outrem_.setInputCloud(in);
+  outrem_.setRadiusSearch(0.01);
+  outrem_.setMinNeighborsInRadius (50);
+  outrem_.filter (*out);
+
+}
+
 bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
 //    boost::mutex::scoped_lock lock(pc_mutex_);
     std::cout << "PCP: segmenting single plane..." << std::endl;
@@ -264,7 +273,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     seg_.setMaxIterations(200);
     seg_.setMethodType (pcl::SAC_RANSAC);
     seg_.setAxis(axis);
-    seg_.setEpsAngle(15.0f * (M_PI/180.0f));
+    seg_.setEpsAngle(20.0f * (M_PI/180.0f));
     seg_.setDistanceThreshold (0.01);
 
     while(true) {
@@ -510,5 +519,52 @@ bool PointCloudProc::get3DPoint(int col, int row, geometry_msgs::PointStamped &p
     std::cout << "PCP: The 3D point is not valid!" << std::endl;
     return false;
   }
+
+}
+
+bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& object) {
+
+  if(!transformPointCloud()){
+    std::cout << "PCP: couldn't transform point cloud!" << std::endl;
+    return false;
+  }
+  sensor_msgs::PointCloud2 object_cloud_ros;
+  pcl_conversions::fromPCL(cloud_transformed_->header, object.header);
+
+  CloudT::Ptr object_cloud(new CloudT);
+  CloudT::Ptr object_cloud_filtered(new CloudT);
+  object_cloud->header = cloud_transformed_->header;
+
+  for (int i = bbox[0]; i < bbox[2]; i++){
+    for (int j = bbox[1]; j < bbox[3]; j++){
+      if (pcl::isFinite(cloud_transformed_->at(i, j))) {
+
+        object_cloud->push_back(cloud_transformed_->at(i, j));
+//        std::cout << cloud_transformed_->at(i, j).x << " " << cloud_transformed_->at(i, j).y << " " << cloud_transformed_->at(i, j).z <<std::endl;
+      }
+    }
+
+  }
+
+  removeOutliers(object_cloud, object_cloud_filtered);
+  if(object_cloud_filtered->empty()){
+    std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+    return false;
+  }
+
+  Eigen::Vector4f min_vals, max_vals;
+
+  pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
+
+  object.min.x = min_vals[0];
+  object.min.y = min_vals[1];
+  object.min.z = min_vals[2];
+  object.max.x = max_vals[0];
+  object.max.y = max_vals[1];
+  object.max.z = max_vals[2];
+
+
+  debug_cloud_pub_.publish(object_cloud_filtered);
+  return true;
 
 }

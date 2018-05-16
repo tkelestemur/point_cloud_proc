@@ -32,6 +32,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/project_inliers.h>
+#include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/surface/convex_hull.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -66,11 +67,13 @@ public:
 
     bool transformPointCloud();
     bool filterPointCloud();
+    bool removeOutliers(CloudT::Ptr in, CloudT::Ptr out);
     bool segmentSinglePlane(point_cloud_proc::Plane& plane);
     bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
     bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
     bool extractTabletop();
     bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
+    bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
 
 private:
     pcl::PassThrough<PointT> pass_;
@@ -80,6 +83,7 @@ private:
     pcl::ConvexHull<PointT> chull_;
     pcl::ExtractPolygonalPrismData<PointT> prism_;
     pcl::EuclideanClusterExtraction<PointT> ec_;
+    pcl::RadiusOutlierRemoval<PointT> outrem_;
 
     int k_search_;
     bool debug_;
