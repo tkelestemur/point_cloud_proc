@@ -24,9 +24,9 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
 
 
     if (debug_) {
-        table_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("table_cloud", 10);
-        debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
-        tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
+      plane_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("plane_cloud", 10);
+      debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
+      tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
 
 
     }
@@ -98,6 +98,7 @@ bool PointCloudProc::transformPointCloud() {
 
       pcl::fromROSMsg(cloud_transformed, *cloud_transformed_);
 
+      std::cout << "PCP: point cloud is transformed!" << std::endl;
       return true;
 
     }
@@ -192,7 +193,7 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
 
     if (debug_) {
       std::cout << "PCP: # of points in plane: " << cloud_plane->points.size() << std::endl;
-      table_cloud_pub_.publish(cloud_plane);
+      plane_cloud_pub_.publish(cloud_plane);
     }
 
     cloud_hull_->clear();
@@ -260,7 +261,8 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
       return false;
     }
 
-
+    CloudT plane_clouds;
+    plane_clouds.header.frame_id = cloud_transformed_->header.frame_id;
     point_cloud_proc::Plane plane_object_msg;
     int MIN_PLANE_SIZE = 5000;
     int no_planes = 0;
@@ -273,7 +275,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     seg_.setMaxIterations(200);
     seg_.setMethodType (pcl::SAC_RANSAC);
     seg_.setAxis(axis);
-    seg_.setEpsAngle(20.0f * (M_PI/180.0f));
+    seg_.setEpsAngle(15.0f * (M_PI/180.0f));
     seg_.setDistanceThreshold (0.01);
 
     while(true) {
@@ -291,7 +293,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
             break;
         }
         else {
-            std::cout << "PCP: " <<no_planes+1 << ". plane segmented! plane size: " << inliers->indices.size() << std::endl;
+            std::cout << "PCP: " <<no_planes+1 << ". plane segmented! # of points: " << inliers->indices.size() << std::endl;
             no_planes++;
         }
 
@@ -300,9 +302,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         extract_.setIndices (inliers);
         extract_.filter (*cloud_plane);
 
-        if (debug_) {
-            table_cloud_pub_.publish(cloud_plane);
-        }
+        plane_clouds +=*cloud_plane;
 
         chull_.setInputCloud (cloud_plane);
         chull_.setDimension(2);
@@ -355,6 +355,10 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         extract_.setNegative(true);
         extract_.filter(*cloud_filtered_);
 
+    }
+
+    if (debug_) {
+      plane_cloud_pub_.publish(plane_clouds);
     }
     return true;
 }
@@ -492,7 +496,7 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
 
         k++;
         if(debug_){
-          std::cout << "PCP: number of points in object " << k << " : " << cluster->points.size() << std::endl;
+          std::cout << "PCP: # of points in object " << k << " : " << cluster->points.size() << std::endl;
         }
 
 
@@ -563,6 +567,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& obje
   object.max.y = max_vals[1];
   object.max.z = max_vals[2];
 
+  Eigen::Vector4f center;
+  pcl::compute3DCentroid(*object_cloud_filtered, center);
+  object.center.x = center[0];
+  object.center.y = center[1];
+  object.center.z = center[2];
 
   debug_cloud_pub_.publish(object_cloud_filtered);
   return true;

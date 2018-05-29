@@ -98,7 +98,7 @@ private:
 
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
-    ros::Publisher table_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
+    ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
 
 
 
