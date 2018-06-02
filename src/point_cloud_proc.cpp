@@ -4,21 +4,32 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
         nh_(n), debug_(debug), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
         cloud_hull_(new CloudT), cloud_tabletop_(new CloudT) {
 
-    leaf_size_ = 0.01;
-    k_search_ = 50;
-    cluster_tol_ = 0.03;
-    pass_limits_ = {-0.2, 1.5, -1.5, 1.5, 0.2, 2.0};
-    prism_limits_ = {-0.25, -0.02};
-    point_cloud_topic_ = "/hsrb/head_rgbd_sensor/depth_registered/rectified_points";
-    fixed_frame_ = "base_link";
 
-//    nh_.getParam("/point_cloud_debug", debug_);
-//    nh_.getParam("/filters/pass_limits", pass_limits_);
-//    nh_.getParam("/filters/k_search", k_search_);
-//    nh_.getParam("/segmentation/prism_limits", prism_limits_);
-//    nh_.getParam("/segmentation/cluster_tolerance", cluster_tol_);
-//    nh_.getParam("/point_cloud_topic_name", point_cloud_topic_);
-//    nh_.getParam("/point_cloud_frame", fixed_frame_);
+    std::string pkg_path = ros::package::getPath("point_cloud_proc");
+    std::string config_path = pkg_path + "/config/robocup_montreal.yaml";
+
+    YAML::Node parameters = YAML::LoadFile(config_path);
+
+    // General parameters
+    point_cloud_topic_ = parameters["point_cloud_topic"].as<std::string>();
+    fixed_frame_ = parameters["fixed_frame"].as<std::string>();
+
+    // Segmentation parameters
+    eps_angle_ = parameters["segmentation"]["sac_eps_angle"].as<float>();
+    dist_thresh_ = parameters["segmentation"]["sac_dist_thresh"].as<float>();
+    min_plane_size_= parameters["segmentation"]["sac_min_plane_size"].as<int>();
+    max_iter_ = parameters["segmentation"]["sac_max_iter"].as<int>();
+    k_search_ = parameters["segmentation"]["ne_k_search"].as<int>();
+    cluster_tol_ = parameters["segmentation"]["ec_cluster_tol"].as<float>();
+    min_cluster_size_ = parameters["segmentation"]["ec_min_cluster_size"].as<int>();
+    max_cluster_size_ = parameters["segmentation"]["ec_max_cluster_size"].as<int>();
+
+    // Filter parameters
+    leaf_size_ = parameters["filters"]["leaf_size"].as<float>();
+    pass_limits_ = parameters["filters"]["pass_limits"].as<std::vector<float>>();
+    prism_limits_ = parameters["filters"]["prism_limits"].as<std::vector<float>>();
+    min_neighbors_ = parameters["filters"]["outlier_min_neighbors"].as<int>();
+    radius_search_ = parameters["filters"]["outlier_radius_search"].as<float>();
 
     point_cloud_sub_ = nh_.subscribe(point_cloud_topic_, 10, &PointCloudProc::pointCloudCb, this);
 
@@ -27,54 +38,16 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
       plane_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("plane_cloud", 10);
       debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
       tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
-
-
     }
 }
 
-//void PointCloudProc::pointCloudCb(const CloudT::ConstPtr &msg) {
-//    boost::mutex::scoped_lock lock(pc_mutex_);
-//    cloud_raw_ = msg;
-//}
 
 void PointCloudProc::pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg) {
-  boost::mutex::scoped_lock lock(pc_mutex_);
-  cloud_raw_ros_ = *msg;
-//  sensor_msgs::Image img;
-//  pcl::toROSMsg(*msg, img);
-//  test_img_pub_.publish(img);
+    boost::mutex::scoped_lock lock(pc_mutex_);
+    cloud_raw_ros_ = *msg;
 }
 
-//void PointCloudProc::transformBroadcasterThread() {
-//    tf::TransformListener listener;
-//    tf::TransformBroadcaster br;
-//
-//    listener.waitForTransform("base_link", "head_pan_link", ros::Time::now(), ros::Duration(2.0));
-//
-//    ros::Rate rate(100.0);
-//    while (nh_.ok()){
-//      tf::StampedTransform transform;
-//      try{
-//        listener.lookupTransform("base_link", "head_pan_link", ros::Time(0), transform);
-////        tf::Transform cloud_frame;
-//        cloud_frame_.setOrigin( tf::Vector3(0.0, 0.0, 0.0) );
-//        cloud_frame_.setRotation(transform.getRotation());
-////        br.sendTransform(tf::StampedTransform(cloud_frame, ros::Time::now(), "base_link", "point_cloud_frame"));
-//      }
-//      catch (tf::TransformException ex){
-//        ROS_ERROR("%s",ex.what());
-//        ros::Duration(1.0).sleep();
-//      }
-//      rate.sleep();
-//    }
-//
-//}
-//
-//
-//void PointCloudProc::startThreads() {
-//  transform_br_thread_ = boost::thread(&PointCloudProc::transformBroadcasterThread, this);
-//
-//}
+
 
 bool PointCloudProc::transformPointCloud() {
     boost::mutex::scoped_lock lock(pc_mutex_);
@@ -142,14 +115,14 @@ bool PointCloudProc::filterPointCloud() {
 
 bool PointCloudProc::removeOutliers(CloudT::Ptr in, CloudT::Ptr out) {
 
-  outrem_.setInputCloud(in);
-  outrem_.setRadiusSearch(0.01);
-  outrem_.setMinNeighborsInRadius (50);
-  outrem_.filter (*out);
+    outrem_.setInputCloud(in);
+    outrem_.setRadiusSearch(radius_search_);
+    outrem_.setMinNeighborsInRadius(min_neighbors_);
+    outrem_.filter (*out);
 
 }
 
-bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
+bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axis) {
 //    boost::mutex::scoped_lock lock(pc_mutex_);
     std::cout << "PCP: segmenting single plane..." << std::endl;
 
@@ -169,13 +142,25 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
     pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
 
-    Eigen::Vector3f axis = Eigen::Vector3f(0.0,0.0,1.0); //z axis
+    Eigen::Vector3f axis_vector = Eigen::Vector3f(0.0, 0.0, 0.0);
+
+    if(axis == 'x'){
+      axis_vector[0] = 1.0;
+    }
+    else if(axis == 'y'){
+      axis_vector[1] = 1.0;
+    }
+    else if(axis == 'z'){
+      axis_vector[2] = 1.0;
+    }
+
     seg_.setOptimizeCoefficients (true);
+    seg_.setMaxIterations(max_iter_);
     seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
     seg_.setMethodType (pcl::SAC_RANSAC);
-    seg_.setAxis(axis);
-    seg_.setEpsAngle(20.0f * (M_PI/180.0f));
-    seg_.setDistanceThreshold (0.01);
+    seg_.setAxis(axis_vector);
+    seg_.setEpsAngle(eps_angle_ * (M_PI/180.0f));
+    seg_.setDistanceThreshold (dist_thresh_);
     seg_.setInputCloud (cloud_filtered_);
     seg_.segment (*inliers, *coefficients);
 
@@ -184,7 +169,6 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
       std::cout << "PCP: plane is empty!" << std::endl;
       return false;
     }
-
 
     extract_.setInputCloud (cloud_filtered_);
     extract_.setNegative(false);
@@ -242,8 +226,6 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane) {
     plane.coef[3] = coefficients->values[3];
 
     plane.size.data = cloud_plane->points.size();
-    plane.is_horizontal = true;
-
     return true;
 }
 
@@ -264,19 +246,20 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     CloudT plane_clouds;
     plane_clouds.header.frame_id = cloud_transformed_->header.frame_id;
     point_cloud_proc::Plane plane_object_msg;
-    int MIN_PLANE_SIZE = 5000;
+
     int no_planes = 0;
+    CloudT::Ptr cloud_plane_raw (new CloudT);
     CloudT::Ptr cloud_plane (new CloudT);
     CloudT::Ptr cloud_hull (new CloudT);
 
-    Eigen::Vector3f axis = Eigen::Vector3f(0.0,0.0,1.0); //z axis
+//    Eigen::Vector3f axis = Eigen::Vector3f(0.0,0.0,1.0); //z axis
     seg_.setOptimizeCoefficients (true);
     seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
-    seg_.setMaxIterations(200);
+    seg_.setMaxIterations(max_iter_);
     seg_.setMethodType (pcl::SAC_RANSAC);
-    seg_.setAxis(axis);
-    seg_.setEpsAngle(15.0f * (M_PI/180.0f));
-    seg_.setDistanceThreshold (0.01);
+//    seg_.setAxis(axis);
+    seg_.setEpsAngle(eps_angle_ * (M_PI/180.0f));
+    seg_.setDistanceThreshold(dist_thresh_);
 
     while(true) {
         pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
@@ -289,11 +272,15 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
             return false;
         }
 
-        else if (inliers->indices.size() < MIN_PLANE_SIZE) {
+        else if (inliers->indices.size() < min_plane_size_) {
             break;
         }
         else {
             std::cout << "PCP: " <<no_planes+1 << ". plane segmented! # of points: " << inliers->indices.size() << std::endl;
+            std::cout << "PCP: plane coefficients : " << coefficients->values[0]  << " "
+                                                      << coefficients->values[1]  << " "
+                                                      << coefficients->values[2]  << " "
+                                                      << coefficients->values[3]  << std::endl;
             no_planes++;
         }
 
@@ -301,6 +288,14 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         extract_.setNegative(false);
         extract_.setIndices (inliers);
         extract_.filter (*cloud_plane);
+
+//        plane_proj_.setInputCloud(cloud_plane_raw);
+//        plane_proj_.setModelType(pcl::SACMODEL_PLANE);
+//        plane_proj_.setModelCoefficients (coefficients);
+//        plane_proj_.filter (*cloud_plane);
+
+
+//        removeOutliers(cloud_plane_raw, cloud_plane);
 
         plane_clouds +=*cloud_plane;
 
@@ -348,8 +343,33 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         plane_object_msg.coef[2] = coefficients->values[2];
         plane_object_msg.coef[3] = coefficients->values[3];
 
+        if(std::abs(coefficients->values[0]) < 1.1 &&
+           std::abs(coefficients->values[0]) > 0.9 &&
+           std::abs(coefficients->values[1]) < 0.1 &&
+           std::abs(coefficients->values[2]) < 0.1){
+          plane_object_msg.orientation = point_cloud_proc::Plane::XAXIS;
+        }
+
+        else if(std::abs(coefficients->values[0]) < 0.1 &&
+           std::abs(coefficients->values[1]) > 0.9 &&
+           std::abs(coefficients->values[1]) < 1.1 &&
+           std::abs(coefficients->values[2]) < 0.1){
+          plane_object_msg.orientation = point_cloud_proc::Plane::YAXIS;
+        }
+
+        else if(std::abs(coefficients->values[0]) < 0.1 &&
+           std::abs(coefficients->values[1]) < 0.1 &&
+           std::abs(coefficients->values[2]) < 1.1 &&
+           std::abs(coefficients->values[2]) > 0.9){
+          plane_object_msg.orientation = point_cloud_proc::Plane::ZAXIS;
+        }
+
+        else{
+          plane_object_msg.orientation = point_cloud_proc::Plane::NOAXIS;
+        }
+
+
         plane_object_msg.size.data = cloud_plane->points.size();
-        plane_object_msg.is_horizontal = true;
 
         planes.push_back(plane_object_msg);
         extract_.setNegative(true);
@@ -398,8 +418,8 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
     std::vector<pcl::PointIndices> cluster_indices;
 
     ec_.setClusterTolerance (cluster_tol_);
-    ec_.setMinClusterSize (50);
-    ec_.setMaxClusterSize (25000);
+    ec_.setMinClusterSize (min_cluster_size_);
+    ec_.setMaxClusterSize (max_cluster_size_);
     ec_.setSearchMethod (tree);
     ec_.setInputCloud (cloud_tabletop_);
     ec_.extract (cluster_indices);

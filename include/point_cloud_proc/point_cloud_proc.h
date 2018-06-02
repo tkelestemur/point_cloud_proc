@@ -3,6 +3,7 @@
 
 // ROS
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
@@ -53,6 +54,13 @@
 #include <boost/thread/thread.hpp>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <yaml-cpp/yaml.h>
+
+enum AXIS{
+    XAXIS,
+    YAXIS,
+    ZAXIS
+};
 
 class PointCloudProc{
     typedef pcl::PointXYZRGB PointT;
@@ -68,7 +76,7 @@ public:
     bool transformPointCloud();
     bool filterPointCloud();
     bool removeOutliers(CloudT::Ptr in, CloudT::Ptr out);
-    bool segmentSinglePlane(point_cloud_proc::Plane& plane);
+    bool segmentSinglePlane(point_cloud_proc::Plane& plane, char axis='z');
     bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
     bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
     bool extractTabletop();
@@ -84,10 +92,12 @@ private:
     pcl::ExtractPolygonalPrismData<PointT> prism_;
     pcl::EuclideanClusterExtraction<PointT> ec_;
     pcl::RadiusOutlierRemoval<PointT> outrem_;
+    pcl::ProjectInliers<PointT> plane_proj_;
 
-    int k_search_;
     bool debug_;
-    float cluster_tol_, leaf_size_;
+    int k_search_, min_plane_size_, max_iter_, min_cluster_size_, max_cluster_size_, min_neighbors_;
+    float cluster_tol_, leaf_size_, eps_angle_, dist_thresh_, radius_search_;
+
     std::vector<float> pass_limits_, prism_limits_;
     std::string point_cloud_topic_, fixed_frame_;
 
@@ -99,8 +109,6 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
     ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
-
-
 
 };
 

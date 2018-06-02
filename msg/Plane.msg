@@ -1,3 +1,8 @@
+byte XAXIS=0
+byte YAXIS=1
+byte ZAXIS=2
+byte NOAXIS=3
+
 Header header
 
 float64[4] coef
@@ -12,4 +17,4 @@ geometry_msgs/Point32[] polygon
 
 std_msgs/Int32 size
 
-bool is_horizontal
+byte orientation
