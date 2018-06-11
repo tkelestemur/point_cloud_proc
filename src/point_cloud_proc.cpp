@@ -391,6 +391,8 @@ bool PointCloudProc::extractTabletop() {
     prism_.setHeightLimits(prism_limits_[0], prism_limits_[1]);
     prism_.segment(*tabletop_indices);
 
+    tabletop_indicies_ = tabletop_indices;
+
     extract_.setInputCloud (cloud_filtered_);
     extract_.setIndices(tabletop_indices);
     extract_.filter(*cloud_tabletop_);
@@ -596,4 +598,22 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& obje
   debug_cloud_pub_.publish(object_cloud_filtered);
   return true;
 
+}
+
+sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
+  sensor_msgs::PointCloud2::Ptr tabletop_cloud;
+  pcl::toROSMsg(*cloud_tabletop_, *tabletop_cloud);
+
+  return tabletop_cloud;
+}
+
+PointCloudProc::CloudT::Ptr PointCloudProc::getFilteredCloud() {
+//  sensor_msgs::PointCloud2::Ptr filtered_cloud;
+//  pcl::toROSMsg(*cloud_filtered_, *filtered_cloud);
+
+  return cloud_filtered_;
+}
+
+pcl::PointIndices::Ptr PointCloudProc::getTabletopIndicies() {
+  return tabletop_indicies_;
 }

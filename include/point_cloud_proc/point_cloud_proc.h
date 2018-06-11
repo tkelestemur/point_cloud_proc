@@ -82,6 +82,10 @@ public:
     bool extractTabletop();
     bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
     bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
+    sensor_msgs::PointCloud2::Ptr getTabletopCloud();
+    CloudT::Ptr getFilteredCloud();
+    pcl::PointIndices::Ptr getTabletopIndicies();
+
 
 private:
     pcl::PassThrough<PointT> pass_;
@@ -102,6 +106,7 @@ private:
     std::string point_cloud_topic_, fixed_frame_;
 
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
+    pcl::PointIndices::Ptr tabletop_indicies_;
     sensor_msgs::PointCloud2 cloud_raw_ros_;
 
     boost::mutex pc_mutex_;

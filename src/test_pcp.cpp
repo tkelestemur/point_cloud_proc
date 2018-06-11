@@ -12,14 +12,14 @@ int main(int argc, char **argv) {
   spinner.start();
   ros::Duration(1.0).sleep();
 
-  std::vector<point_cloud_proc::Plane> planes;
-  pcp.segmentMultiplePlane(planes);
+//  std::vector<point_cloud_proc::Plane> planes;
+//  pcp.segmentMultiplePlane(planes);
 
-//  point_cloud_proc::Plane plane;
-//  pcp.segmentSinglePlane(plane);
-//
-//  std::vector<point_cloud_proc::Object> objects;
-//  pcp.clusterObjects(objects);
+  point_cloud_proc::Plane plane;
+  pcp.segmentSinglePlane(plane);
+
+  std::vector<point_cloud_proc::Object> objects;
+  pcp.clusterObjects(objects);
 
 
   ros::shutdown();
