@@ -8,7 +8,8 @@ filters:
   outlier_radius_search: 0.01
 segmentation:
   sac_eps_angle: 10.0
-  sac_dist_thresh: 0.01
+  sac_dist_thresh_single: 0.01
+  sac_dist_thresh_multi: 0.02
   sac_min_plane_size: 10000
   sac_max_iter: 1000
   ec_cluster_tol: 0.03

@@ -103,8 +103,14 @@ add_library(${PROJECT_NAME} src/point_cloud_proc.cpp)
 target_link_libraries(point_cloud_proc ${catkin_LIBRARIES} yaml-cpp)
 add_dependencies(point_cloud_proc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} point_cloud_proc_generate_messages_cpp)
 
-add_executable(test_pcp src/test_pcp.cpp)
-target_link_libraries(test_pcp point_cloud_proc ${catkin_LIBRARIES} yaml-cpp)
+add_executable(test_single_plane tests/test_single_plane.cpp)
+target_link_libraries(test_single_plane point_cloud_proc ${catkin_LIBRARIES})
+
+add_executable(test_multi_plane tests/test_multi_plane.cpp)
+target_link_libraries(test_multi_plane point_cloud_proc ${catkin_LIBRARIES})
+
+add_executable(test_tabletop_cluster tests/test_tabletop_cluster.cpp)
+target_link_libraries(test_tabletop_cluster point_cloud_proc ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

@@ -100,7 +100,7 @@ private:
 
     bool debug_;
     int k_search_, min_plane_size_, max_iter_, min_cluster_size_, max_cluster_size_, min_neighbors_;
-    float cluster_tol_, leaf_size_, eps_angle_, dist_thresh_, radius_search_;
+    float cluster_tol_, leaf_size_, eps_angle_, single_dist_thresh_, multi_dist_thresh_, radius_search_;
 
     std::vector<float> pass_limits_, prism_limits_;
     std::string point_cloud_topic_, fixed_frame_;

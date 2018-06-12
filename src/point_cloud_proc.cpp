@@ -16,7 +16,8 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
 
     // Segmentation parameters
     eps_angle_ = parameters["segmentation"]["sac_eps_angle"].as<float>();
-    dist_thresh_ = parameters["segmentation"]["sac_dist_thresh"].as<float>();
+    single_dist_thresh_ = parameters["segmentation"]["sac_dist_thresh_single"].as<float>();
+    multi_dist_thresh_ = parameters["segmentation"]["sac_dist_thresh_multi"].as<float>();
     min_plane_size_= parameters["segmentation"]["sac_min_plane_size"].as<int>();
     max_iter_ = parameters["segmentation"]["sac_max_iter"].as<int>();
     k_search_ = parameters["segmentation"]["ne_k_search"].as<int>();
@@ -160,7 +161,7 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
     seg_.setMethodType (pcl::SAC_RANSAC);
     seg_.setAxis(axis_vector);
     seg_.setEpsAngle(eps_angle_ * (M_PI/180.0f));
-    seg_.setDistanceThreshold (dist_thresh_);
+    seg_.setDistanceThreshold (single_dist_thresh_);
     seg_.setInputCloud (cloud_filtered_);
     seg_.segment (*inliers, *coefficients);
 
@@ -259,9 +260,10 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     seg_.setMethodType (pcl::SAC_RANSAC);
 //    seg_.setAxis(axis);
     seg_.setEpsAngle(eps_angle_ * (M_PI/180.0f));
-    seg_.setDistanceThreshold(dist_thresh_);
+    seg_.setDistanceThreshold(multi_dist_thresh_);
 
     while(true) {
+
         pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
         pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
         seg_.setInputCloud (cloud_filtered_);
@@ -277,10 +279,10 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         }
         else {
             std::cout << "PCP: " <<no_planes+1 << ". plane segmented! # of points: " << inliers->indices.size() << std::endl;
-            std::cout << "PCP: plane coefficients : " << coefficients->values[0]  << " "
-                                                      << coefficients->values[1]  << " "
-                                                      << coefficients->values[2]  << " "
-                                                      << coefficients->values[3]  << std::endl;
+//            std::cout << "PCP: plane coefficients : " << coefficients->values[0]  << " "
+//                                                      << coefficients->values[1]  << " "
+//                                                      << coefficients->values[2]  << " "
+//                                                      << coefficients->values[3]  << std::endl;
             no_planes++;
         }
 
@@ -374,12 +376,15 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         planes.push_back(plane_object_msg);
         extract_.setNegative(true);
         extract_.filter(*cloud_filtered_);
-
+        
+      ros::Duration(0.2).sleep();
     }
 
-    if (debug_) {
-      plane_cloud_pub_.publish(plane_clouds);
-    }
+  if (debug_) {
+    plane_cloud_pub_.publish(plane_clouds);
+  }
+
+
     return true;
 }
 
@@ -595,7 +600,7 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& obje
   object.center.y = center[1];
   object.center.z = center[2];
 
-  debug_cloud_pub_.publish(object_cloud_filtered);
+//  debug_cloud_pub_.publish(object_cloud_filtered);
   return true;
 
 }
