@@ -12,6 +12,8 @@
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
+#include <pcl_msgs/PolygonMesh.h>
+#include <point_cloud_proc/Mesh.h>
 #include <point_cloud_proc/Planes.h>
 #include <point_cloud_proc/Object.h>
 #include <point_cloud_proc/Objects.h>
@@ -29,6 +31,7 @@
 #include <pcl/common/common.h>
 #include <pcl/common/pca.h>
 #include <pcl/kdtree/kdtree.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
@@ -47,6 +50,8 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/moment_of_inertia_estimation.h>
+#include <pcl/surface/gp3.h>
+//#include <pcl/surface/vtk_smoothing/vtk_mesh_quadric_decimation.h>
 
 // Other
 #include <boost/thread/mutex.hpp>
@@ -82,6 +87,8 @@ public:
     bool extractTabletop();
     bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
     bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
+    bool trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msgs::PolygonMesh& mesh);
+    void getRemainingCloud(sensor_msgs::PointCloud2& cloud);
     sensor_msgs::PointCloud2::Ptr getTabletopCloud();
     CloudT::Ptr getFilteredCloud();
     pcl::PointIndices::Ptr getTabletopIndicies();
@@ -97,6 +104,7 @@ private:
     pcl::EuclideanClusterExtraction<PointT> ec_;
     pcl::RadiusOutlierRemoval<PointT> outrem_;
     pcl::ProjectInliers<PointT> plane_proj_;
+    pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3_;
 
     bool debug_;
     int k_search_, min_plane_size_, max_iter_, min_cluster_size_, max_cluster_size_, min_neighbors_;

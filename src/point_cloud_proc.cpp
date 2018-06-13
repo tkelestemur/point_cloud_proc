@@ -186,6 +186,8 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
     chull_.setDimension(2);
     chull_.reconstruct (*cloud_hull_);
 
+    // Get cloud
+    pcl::toROSMsg(*cloud_plane, plane.cloud);
 
     // Construct plane object msg
     pcl_conversions::fromPCL(cloud_plane->header, plane.header);
@@ -227,6 +229,10 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
     plane.coef[3] = coefficients->values[3];
 
     plane.size.data = cloud_plane->points.size();
+
+    extract_.setNegative(true);
+    extract_.filter(*cloud_filtered_);
+
     return true;
 }
 
@@ -311,6 +317,8 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         Eigen::Vector4f min_vals, max_vals;
         pcl::getMinMax3D(*cloud_plane, min_vals, max_vals);
 
+        // Get cloud
+        pcl::toROSMsg(*cloud_plane, plane_object_msg.cloud);
 
         // Construct plane object msg
         pcl_conversions::fromPCL(cloud_plane->header, plane_object_msg.header);
@@ -376,8 +384,8 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         planes.push_back(plane_object_msg);
         extract_.setNegative(true);
         extract_.filter(*cloud_filtered_);
-        
-      ros::Duration(0.2).sleep();
+
+      ros::Duration(0.1).sleep();
     }
 
   if (debug_) {
@@ -483,14 +491,17 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
             object.normals.push_back(normal);
         }
 
+        // Get cloud
+        pcl::toROSMsg(*cluster, object.cloud);
+
         // Get point coordinates
-        for (int j = 0; j < cluster->points.size(); j++) {
-            geometry_msgs::Vector3 p;
-            p.x = cluster->points[j].x;
-            p.y = cluster->points[j].y;
-            p.z = cluster->points[j].z;
-            object.points.push_back(p);
-        }
+//        for (int j = 0; j < cluster->points.size(); j++) {
+//            geometry_msgs::Vector3 p;
+//            p.x = cluster->points[j].x;
+//            p.y = cluster->points[j].y;
+//            p.z = cluster->points[j].z;
+//            object.points.push_back(p);
+//        }
 
         // Get object center
         Eigen::Vector4f center;
@@ -569,9 +580,7 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& obje
   for (int i = bbox[0]; i < bbox[2]; i++){
     for (int j = bbox[1]; j < bbox[3]; j++){
       if (pcl::isFinite(cloud_transformed_->at(i, j))) {
-
         object_cloud->push_back(cloud_transformed_->at(i, j));
-//        std::cout << cloud_transformed_->at(i, j).x << " " << cloud_transformed_->at(i, j).y << " " << cloud_transformed_->at(i, j).z <<std::endl;
       }
     }
 
@@ -600,16 +609,88 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object& obje
   object.center.y = center[1];
   object.center.z = center[2];
 
-//  debug_cloud_pub_.publish(object_cloud_filtered);
+  debug_cloud_pub_.publish(object_cloud_filtered);
   return true;
 
 }
 
-sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
-  sensor_msgs::PointCloud2::Ptr tabletop_cloud;
-  pcl::toROSMsg(*cloud_tabletop_, *tabletop_cloud);
+bool PointCloudProc::trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msgs::PolygonMesh& mesh) {
 
-  return tabletop_cloud;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz (new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz_ (new pcl::PointCloud<pcl::PointXYZ>);
+//  pcl::copyPointCloud(*cloud, *cloud_xyz);
+  pcl::fromROSMsg(cloud, *cloud_xyz_);
+  pcl::VoxelGrid<pcl::PointXYZ> vg;
+  vg.setInputCloud (cloud_xyz_);
+  vg.setLeafSize (0.05f, 0.05f, 0.05f);
+//  vg.setLeafSize(0.005f, 0.005f, 0.005f);
+  vg.filter(*cloud_xyz);
+
+  // Compute point normals
+  pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+  pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+  pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals (new pcl::PointCloud<pcl::PointNormal>);
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
+
+  tree->setInputCloud(cloud_xyz);
+  ne.setInputCloud(cloud_xyz);
+  ne.setSearchMethod (tree);
+  ne.setKSearch(20);
+  ne.compute (*normals);
+
+  pcl::concatenateFields (*cloud_xyz, *normals, *cloud_normals);
+
+  pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
+  tree2->setInputCloud(cloud_normals);
+
+//  pcl::PolygonMesh triangles;
+  pcl::PolygonMesh::Ptr triangles(new pcl::PolygonMesh());
+  gp3_.setSearchRadius (0.2);
+  gp3_.setMu (2.5);
+  gp3_.setMaximumNearestNeighbors (100);
+  gp3_.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
+  gp3_.setMinimumAngle(M_PI/18); // 10 degrees
+  gp3_.setMaximumAngle(2*M_PI/3); // 120 degrees
+  gp3_.setNormalConsistency(false);
+
+  gp3_.setInputCloud (cloud_normals);
+  gp3_.setSearchMethod (tree2);
+  gp3_.reconstruct (*triangles);
+
+
+  pcl_conversions::fromPCL(*triangles, mesh);
+
+
+//  pcl::PointCloud<pcl::PointXYZ> triangle_cloud;
+//  pcl::fromPCLPointCloud2(triangles.cloud, triangle_cloud);
+//  int i = 0;
+//  mesh.vertices.resize(t)
+//  for(auto point : triangle_cloud.points){
+//    geometry_msgs::Point p;
+//    p.x = point.x;
+//    p.y = point.y;
+//    p.z = point.z;
+//
+//    mesh.vertices.push_back(p);
+//    triangles.polygons[i]
+//  }
+
+
+  return true;
+}
+
+void PointCloudProc::getRemainingCloud(sensor_msgs::PointCloud2& cloud) {
+//  sensor_msgs::PointCloud2::Ptr cloud;
+  pcl::toROSMsg(*cloud_filtered_, cloud);
+
+//  return cloud;
+}
+
+sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
+  sensor_msgs::PointCloud2::Ptr cloud;
+  pcl::toROSMsg(*cloud_tabletop_, *cloud);
+
+  return cloud;
 }
 
 PointCloudProc::CloudT::Ptr PointCloudProc::getFilteredCloud() {

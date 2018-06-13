@@ -15,6 +15,8 @@ geometry_msgs/Vector3 max
 
 geometry_msgs/Point32[] polygon
 
+sensor_msgs/PointCloud2 cloud
+
 std_msgs/Int32 size
 
 byte orientation
