@@ -230,8 +230,8 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
 
     plane.size.data = cloud_plane->points.size();
 
-    extract_.setNegative(true);
-    extract_.filter(*cloud_filtered_);
+//    extract_.setNegative(true);
+//    extract_.filter(*cloud_filtered_);
 
     return true;
 }
@@ -622,8 +622,8 @@ bool PointCloudProc::trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msg
   pcl::fromROSMsg(cloud, *cloud_xyz_);
   pcl::VoxelGrid<pcl::PointXYZ> vg;
   vg.setInputCloud (cloud_xyz_);
-  vg.setLeafSize (0.05f, 0.05f, 0.05f);
-//  vg.setLeafSize(0.005f, 0.005f, 0.005f);
+//  vg.setLeafSize (0.05f, 0.05f, 0.05f);
+  vg.setLeafSize(0.005f, 0.005f, 0.005f);
   vg.filter(*cloud_xyz);
 
   // Compute point normals

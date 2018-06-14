@@ -3,6 +3,7 @@ fixed_frame: "base_link"
 filters:
   pass_limits: [-0.2, 2.0, -1.5, 1.5, 0.2, 2.0]
   prism_limits: [-0.25, -0.02]
+#  prism_limits: [-0.05, -0.05]
   leaf_size : 0.01
   outlier_min_neighbors: 70
   outlier_radius_search: 0.01
