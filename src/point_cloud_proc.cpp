@@ -254,17 +254,19 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
     plane_clouds.header.frame_id = cloud_transformed_->header.frame_id;
     point_cloud_proc::Plane plane_object_msg;
 
-    int no_planes = 0;
+    int no_planes = 1;
     CloudT::Ptr cloud_plane_raw (new CloudT);
     CloudT::Ptr cloud_plane (new CloudT);
     CloudT::Ptr cloud_hull (new CloudT);
 
 //    Eigen::Vector3f axis = Eigen::Vector3f(0.0,0.0,1.0); //z axis
+//    seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
+//    seg_.setAxis(axis);
+
     seg_.setOptimizeCoefficients (true);
-    seg_.setModelType (pcl::SACMODEL_PERPENDICULAR_PLANE);
+    seg_.setModelType(pcl::SACMODEL_PLANE);
     seg_.setMaxIterations(max_iter_);
     seg_.setMethodType (pcl::SAC_RANSAC);
-//    seg_.setAxis(axis);
     seg_.setEpsAngle(eps_angle_ * (M_PI/180.0f));
     seg_.setDistanceThreshold(multi_dist_thresh_);
 
@@ -276,21 +278,20 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         seg_.segment (*inliers, *coefficients);
 
         if (inliers->indices.size() == 0 and no_planes == 0) {
-            std::cout <<  "PCP: no plane found!!!" << std::endl; // TODO: return false;
+            std::cout <<  "PCP: no plane found!!!" << std::endl;
             return false;
         }
 
         else if (inliers->indices.size() < min_plane_size_) {
             break;
         }
-        else {
-            std::cout << "PCP: " <<no_planes+1 << ". plane segmented! # of points: " << inliers->indices.size() << std::endl;
+
+
 //            std::cout << "PCP: plane coefficients : " << coefficients->values[0]  << " "
 //                                                      << coefficients->values[1]  << " "
 //                                                      << coefficients->values[2]  << " "
 //                                                      << coefficients->values[3]  << std::endl;
-            no_planes++;
-        }
+
 
         extract_.setInputCloud (cloud_filtered_);
         extract_.setNegative(false);
@@ -353,11 +354,14 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         plane_object_msg.coef[2] = coefficients->values[2];
         plane_object_msg.coef[3] = coefficients->values[3];
 
+        std::string axis;
+
         if(std::abs(coefficients->values[0]) < 1.1 &&
            std::abs(coefficients->values[0]) > 0.9 &&
            std::abs(coefficients->values[1]) < 0.1 &&
            std::abs(coefficients->values[2]) < 0.1){
           plane_object_msg.orientation = point_cloud_proc::Plane::XAXIS;
+          axis = "X";
         }
 
         else if(std::abs(coefficients->values[0]) < 0.1 &&
@@ -365,6 +369,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
            std::abs(coefficients->values[1]) < 1.1 &&
            std::abs(coefficients->values[2]) < 0.1){
           plane_object_msg.orientation = point_cloud_proc::Plane::YAXIS;
+          axis = "Y";
         }
 
         else if(std::abs(coefficients->values[0]) < 0.1 &&
@@ -372,12 +377,17 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
            std::abs(coefficients->values[2]) < 1.1 &&
            std::abs(coefficients->values[2]) > 0.9){
           plane_object_msg.orientation = point_cloud_proc::Plane::ZAXIS;
+          axis = "Z";
         }
 
         else{
           plane_object_msg.orientation = point_cloud_proc::Plane::NOAXIS;
+          axis = "NO";
         }
 
+        std::cout << "PCP: " << no_planes << ". plane segmented! # of points: "
+                             << inliers->indices.size() << " axis: " << axis << std::endl;
+        no_planes++;
 
         plane_object_msg.size.data = cloud_plane->points.size();
 
@@ -385,12 +395,13 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         extract_.setNegative(true);
         extract_.filter(*cloud_filtered_);
 
-      ros::Duration(0.1).sleep();
+        if (debug_) {
+          plane_cloud_pub_.publish(cloud_plane);
+        }
+        ros::Duration(0.2).sleep();
     }
 
-  if (debug_) {
-    plane_cloud_pub_.publish(plane_clouds);
-  }
+
 
 
     return true;
@@ -494,15 +505,6 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
         // Get cloud
         pcl::toROSMsg(*cluster, object.cloud);
 
-        // Get point coordinates
-//        for (int j = 0; j < cluster->points.size(); j++) {
-//            geometry_msgs::Vector3 p;
-//            p.x = cluster->points[j].x;
-//            p.y = cluster->points[j].y;
-//            p.z = cluster->points[j].z;
-//            object.points.push_back(p);
-//        }
-
         // Get object center
         Eigen::Vector4f center;
         pcl::compute3DCentroid(*cluster, center);
@@ -521,6 +523,7 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
         object.pose.orientation.y = quat.y();
         object.pose.orientation.z = quat.z();
         object.pose.orientation.w = quat.w();
+
         // Get min max points coords
         Eigen::Vector4f min_vals, max_vals;
         pcl::getMinMax3D(*cluster, min_vals, max_vals);
