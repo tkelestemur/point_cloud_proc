@@ -395,13 +395,13 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
         extract_.setNegative(true);
         extract_.filter(*cloud_filtered_);
 
-        if (debug_) {
-          plane_cloud_pub_.publish(cloud_plane);
-        }
+
         ros::Duration(0.2).sleep();
     }
 
-
+    if (debug_) {
+      plane_cloud_pub_.publish(plane_clouds);
+    }
 
 
     return true;
@@ -687,6 +687,10 @@ void PointCloudProc::getRemainingCloud(sensor_msgs::PointCloud2& cloud) {
   pcl::toROSMsg(*cloud_filtered_, cloud);
 
 //  return cloud;
+}
+
+void PointCloudProc::getFilteredCloud(sensor_msgs::PointCloud2 &cloud) {
+  pcl::toROSMsg(*cloud_transformed_, cloud);
 }
 
 sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {

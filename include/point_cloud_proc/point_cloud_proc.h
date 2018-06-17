@@ -89,6 +89,7 @@ public:
     bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
     bool trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msgs::PolygonMesh& mesh);
     void getRemainingCloud(sensor_msgs::PointCloud2& cloud);
+    void getFilteredCloud(sensor_msgs::PointCloud2& cloud);
     sensor_msgs::PointCloud2::Ptr getTabletopCloud();
     CloudT::Ptr getFilteredCloud();
     pcl::PointIndices::Ptr getTabletopIndicies();
