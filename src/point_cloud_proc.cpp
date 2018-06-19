@@ -28,6 +28,8 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
     // Filter parameters
     leaf_size_ = parameters["filters"]["leaf_size"].as<float>();
     pass_limits_ = parameters["filters"]["pass_limits"].as<std::vector<float>>();
+    pass_limits_shelf_ = parameters["filters"]["pass_limits_shelf"].as<std::vector<float>>();
+    pass_limits_table_ = parameters["filters"]["pass_limits_table"].as<std::vector<float>>();
     prism_limits_ = parameters["filters"]["prism_limits"].as<std::vector<float>>();
     min_neighbors_ = parameters["filters"]["outlier_min_neighbors"].as<int>();
     radius_search_ = parameters["filters"]["outlier_radius_search"].as<float>();
@@ -84,21 +86,47 @@ bool PointCloudProc::transformPointCloud() {
 
 }
 
-bool PointCloudProc::filterPointCloud() {
+bool PointCloudProc::filterPointCloud(int pass) {
 
     // Remove part of the scene to leave table and objects alone
+//    pass_.setInputCloud (cloud_transformed_);
+//    pass_.setFilterFieldName ("x");
+//    pass_.setFilterLimits (pass_limits_[0],  pass_limits_[1]);
+//    pass_.filter(*cloud_filtered_);
+//    pass_.setInputCloud (cloud_filtered_);
+//    pass_.setFilterFieldName ("y");
+//    pass_.setFilterLimits (pass_limits_[2],  pass_limits_[3]);
+//    pass_.filter(*cloud_filtered_);
+//    pass_.setInputCloud (cloud_filtered_);
+//    pass_.setFilterFieldName ("z");
+//    pass_.setFilterLimits (pass_limits_[4],  pass_limits_[5]);
+//    pass_.filter(*cloud_filtered_);
+  std::vector<float> pass_limits;
+  if(pass == PASS_SHELF){
+    pass_limits = pass_limits_shelf_;
+    std::cout << "PCP: using shelf params..." << std::endl;
+  }
+  else if(pass == PASS_TABLE){
+    pass_limits = pass_limits_table_;
+    std::cout << "PCP: using table params..." << std::endl;
+  }else{
+    pass_limits = pass_limits_;
+    std::cout << "PCP: using default params..." << std::endl;
+  }
+
     pass_.setInputCloud (cloud_transformed_);
     pass_.setFilterFieldName ("x");
-    pass_.setFilterLimits (pass_limits_[0],  pass_limits_[1]);
+    pass_.setFilterLimits (pass_limits[0],  pass_limits[1]);
     pass_.filter(*cloud_filtered_);
     pass_.setInputCloud (cloud_filtered_);
     pass_.setFilterFieldName ("y");
-    pass_.setFilterLimits (pass_limits_[2],  pass_limits_[3]);
+    pass_.setFilterLimits (pass_limits[2],  pass_limits[3]);
     pass_.filter(*cloud_filtered_);
     pass_.setInputCloud (cloud_filtered_);
     pass_.setFilterFieldName ("z");
-    pass_.setFilterLimits (pass_limits_[4],  pass_limits_[5]);
+    pass_.setFilterLimits (pass_limits[4],  pass_limits[5]);
     pass_.filter(*cloud_filtered_);
+
 
     std::cout << "PCP: point cloud is filtered!" << std::endl;
     if (cloud_filtered_->points.size() == 0) {
@@ -123,7 +151,7 @@ bool PointCloudProc::removeOutliers(CloudT::Ptr in, CloudT::Ptr out) {
 
 }
 
-bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axis) {
+bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axis, int pass) {
 //    boost::mutex::scoped_lock lock(pc_mutex_);
     std::cout << "PCP: segmenting single plane..." << std::endl;
 
@@ -132,7 +160,7 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
       return false;
     }
 
-    if(!filterPointCloud()){
+    if(!filterPointCloud(pass)){
       std::cout << "PCP: couldn't filter point cloud!" << std::endl;
       return false;
     }
@@ -236,7 +264,7 @@ bool PointCloudProc::segmentSinglePlane(point_cloud_proc::Plane& plane, char axi
     return true;
 }
 
-bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes) {
+bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes, int pass) {
 
 //    boost::mutex::scoped_lock lock(pc_mutex_);
 
@@ -245,7 +273,7 @@ bool PointCloudProc::segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& 
       return false;
     }
 
-    if(!filterPointCloud()){
+    if(!filterPointCloud(pass)){
       std::cout << "PCP: couldn't filter point cloud!" << std::endl;
       return false;
     }
@@ -690,6 +718,14 @@ void PointCloudProc::getRemainingCloud(sensor_msgs::PointCloud2& cloud) {
 }
 
 void PointCloudProc::getFilteredCloud(sensor_msgs::PointCloud2 &cloud) {
+  if(!transformPointCloud()){
+    std::cout << "PCP: couldn't transform point cloud!" << std::endl;
+  }
+
+  if(!filterPointCloud()){
+    std::cout << "PCP: couldn't filter point cloud!" << std::endl;
+  }
+
   pcl::toROSMsg(*cloud_transformed_, cloud);
 }
 

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
   ros::Duration(1.0).sleep();
 
   point_cloud_proc::Plane plane;
-  pcp.segmentSinglePlane(plane, 'z');
+  pcp.segmentSinglePlane(plane, 'z', 2);
 
   ros::shutdown();
   return 0;

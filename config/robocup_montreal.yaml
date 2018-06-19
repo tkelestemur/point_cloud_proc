@@ -1,7 +1,9 @@
 point_cloud_topic: "/hsrb/head_rgbd_sensor/depth_registered/rectified_points"
 fixed_frame: "base_link"
 filters:
-  pass_limits: [-2.0, 2.0, -1.0, 1.0, 0.2, 2.0]
+  pass_limits: [-2.0, 2.0, -0.45, 0.45, 0.2, 2.0]
+  pass_limits_shelf: [-2.0, 2.0, -0.4, 0.4, 0.2, 2.0]
+  pass_limits_table: [-2.0, 2.0, -1.50, 1.50, 0.2, 2.0]
   prism_limits: [-0.25, -0.02]
 #  prism_limits: [-0.05, -0.05]
   leaf_size : 0.01
@@ -11,7 +13,7 @@ segmentation:
   sac_eps_angle: 10.0
   sac_dist_thresh_single: 0.01
   sac_dist_thresh_multi: 0.02
-  sac_min_plane_size: 5000
+  sac_min_plane_size: 3000
   sac_max_iter: 1000
   ec_cluster_tol: 0.03
   ec_min_cluster_size: 50

@@ -79,10 +79,10 @@ public:
     void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
 
     bool transformPointCloud();
-    bool filterPointCloud();
+    bool filterPointCloud(int pass=0);
     bool removeOutliers(CloudT::Ptr in, CloudT::Ptr out);
-    bool segmentSinglePlane(point_cloud_proc::Plane& plane, char axis='z');
-    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
+    bool segmentSinglePlane(point_cloud_proc::Plane& plane, char axis='z', int pass=0);
+    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes, int pass=0);
     bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
     bool extractTabletop();
     bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
@@ -111,7 +111,7 @@ private:
     int k_search_, min_plane_size_, max_iter_, min_cluster_size_, max_cluster_size_, min_neighbors_;
     float cluster_tol_, leaf_size_, eps_angle_, single_dist_thresh_, multi_dist_thresh_, radius_search_;
 
-    std::vector<float> pass_limits_, prism_limits_;
+    std::vector<float> pass_limits_, prism_limits_, pass_limits_shelf_, pass_limits_table_;
     std::string point_cloud_topic_, fixed_frame_;
 
     CloudT::Ptr cloud_transformed_, cloud_filtered_, cloud_hull_, cloud_tabletop_;
@@ -124,6 +124,9 @@ private:
     ros::Subscriber point_cloud_sub_;
     ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
 
+    int PASS_SHELF = 1;
+    int PASS_TABLE = 2;
+    int PASS = 0;
 };
 
 #endif //POINT_CLOUD_PROC_H
