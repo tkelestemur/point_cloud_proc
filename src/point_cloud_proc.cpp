@@ -6,7 +6,7 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
 
 
     std::string pkg_path = ros::package::getPath("point_cloud_proc");
-    std::string config_path = pkg_path + "/config/robocup_montreal.yaml";
+    std::string config_path = pkg_path + "/config/default_config.yaml";
 
     YAML::Node parameters = YAML::LoadFile(config_path);
 
@@ -104,14 +104,14 @@ bool PointCloudProc::filterPointCloud(int pass) {
   std::vector<float> pass_limits;
   if(pass == PASS_SHELF){
     pass_limits = pass_limits_shelf_;
-    std::cout << "PCP: using shelf params..." << std::endl;
+//    std::cout << "PCP: using shelf params..." << std::endl;
   }
   else if(pass == PASS_TABLE){
     pass_limits = pass_limits_table_;
-    std::cout << "PCP: using table params..." << std::endl;
+//    std::cout << "PCP: using table params..." << std::endl;
   }else{
     pass_limits = pass_limits_;
-    std::cout << "PCP: using default params..." << std::endl;
+//    std::cout << "PCP: using default params..." << std::endl;
   }
 
     pass_.setInputCloud (cloud_transformed_);
@@ -462,6 +462,7 @@ bool PointCloudProc::extractTabletop() {
 
 bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objects) {
 
+    std::cout << "PCP: clustering tabletop objects... " << std::endl;
     if (!extractTabletop()){
       return false;
     }
