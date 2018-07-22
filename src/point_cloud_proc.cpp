@@ -41,6 +41,7 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
       plane_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("plane_cloud", 10);
       debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
       tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
+      object_poses_pub_ = nh_.advertise<geometry_msgs::PoseArray>("object_poses", 10);
     }
 }
 
@@ -460,8 +461,9 @@ bool PointCloudProc::extractTabletop() {
     }
 }
 
-bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objects) {
+bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objects, bool compute_normals) {
 
+    geometry_msgs::PoseArray object_poses_rviz;
     std::cout << "PCP: clustering tabletop objects... " << std::endl;
     if (!extractTabletop()){
       return false;
@@ -470,81 +472,83 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
 
     tree->setInputCloud (cloud_tabletop_);
-    std::vector<pcl::PointIndices> cluster_indices;
+    std::vector<pcl::PointIndices> cloud_clusters;
 
     ec_.setClusterTolerance (cluster_tol_);
     ec_.setMinClusterSize (min_cluster_size_);
     ec_.setMaxClusterSize (max_cluster_size_);
     ec_.setSearchMethod (tree);
     ec_.setInputCloud (cloud_tabletop_);
-    ec_.extract (cluster_indices);
+    ec_.extract (cloud_clusters);
 
     pcl::PCA<PointT> pca_ = new pcl::PCA<PointT>;
     pcl::NormalEstimationOMP<PointT, PointNT> ne(4);
 
-    int k = 0;
-    if (cluster_indices.size() == 0)
+
+    if (cloud_clusters.size() == 0)
         return false;
     else
-      std::cout << "PCP: number of objects: " << cluster_indices.size() << std::endl;
+      std::cout << "PCP: number of clusters: " << cloud_clusters.size() << std::endl;
 
-    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it){
+    int k = 0;
+    for(auto cluster_indicies : cloud_clusters){
 
         CloudT::Ptr cluster (new CloudT);
         CloudNT::Ptr cluster_normals (new CloudNT);
-        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit){
-          cluster->points.push_back (cloud_tabletop_->points[*pit]);
-        }
 
-        pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
-        object_indices->indices = it->indices;
+        pcl::PointIndices::Ptr object_indicies_ptr(new pcl::PointIndices);
+        object_indicies_ptr->indices = cluster_indicies.indices;
+
+        extract_.setInputCloud(cloud_tabletop_);
+        extract_.setIndices(object_indicies_ptr);
+        extract_.setNegative(false);
+        extract_.filter(*cluster);
+
+        // Compute PCA to find centeroid and orientation
         Eigen::Matrix3f eigen_vectors;
         Eigen::Vector3f eigen_values;
-        pca_.setInputCloud(cloud_tabletop_);
-        pca_.setIndices(object_indices);
+        Eigen::Vector4f mean_values;
+        pca_.setInputCloud(cluster);
         eigen_vectors = pca_.getEigenVectors();
         eigen_values = pca_.getEigenValues();
+        mean_values = pca_.getMean();
 
-        cluster->header = cloud_tabletop_->header;
-        cluster->width = cluster->points.size();
-        cluster->height = 1;
-        cluster->is_dense = true;
-
-        // Compute point normals
-        pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT> ());
-        ne.setInputCloud(cluster);
-        ne.setSearchMethod (tree);
-        ne.setKSearch(k_search_);
-        ne.compute (*cluster_normals);
+        if(compute_normals){
+          // Compute point normals
+          pcl::search::KdTree<PointT>::Ptr normals_tree (new pcl::search::KdTree<PointT> ());
+          ne.setInputCloud(cluster);
+          ne.setSearchMethod (normals_tree);
+          ne.setKSearch(k_search_);
+          ne.compute (*cluster_normals);
+        }
 
         point_cloud_proc::Object object;
-
         // Get object point cloud
         pcl_conversions::fromPCL(cluster->header, object.header);
 
-        // Get point normals
-        for (int i = 0; i < cluster_normals->points.size(); i++) {
+        // Get cloud
+        pcl::toROSMsg(*cluster, object.cloud);
+
+        if(compute_normals){
+          // Get point normals
+          for (int i = 0; i < cluster_normals->points.size(); i++) {
             geometry_msgs::Vector3 normal;
             normal.x = cluster_normals->points[i].normal_x;
             normal.y = cluster_normals->points[i].normal_y;
             normal.z = cluster_normals->points[i].normal_z;
             object.normals.push_back(normal);
+          }
         }
 
-        // Get cloud
-        pcl::toROSMsg(*cluster, object.cloud);
-
-        // Get object center
-        Eigen::Vector4f center;
-        pcl::compute3DCentroid(*cluster, center);
-        object.center.x = center[0];
-        object.center.y = center[1];
-        object.center.z = center[2];
+        // Get object center TODO: Don't need this use object pose
+        object.center.x = mean_values[0];
+        object.center.y = mean_values[1];
+        object.center.z = mean_values[2];
 
         // geometry_msgs::Pose cluster_pose;
-        object.pose.position.x = center[0];
-        object.pose.position.y = center[1];
-        object.pose.position.z = center[2];
+        object.pose.position.x = mean_values[0];
+        object.pose.position.y = mean_values[1];
+        object.pose.position.z = mean_values[2];
         Eigen::Quaternionf quat (eigen_vectors);
         quat.normalize();
 
@@ -564,15 +568,37 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object>& objec
         object.max.y = max_vals[1];
         object.max.z = max_vals[2];
 
+        object_poses_rviz.poses.push_back(object.pose);
         k++;
-        if(debug_){
-          std::cout << "PCP: # of points in object " << k << " : " << cluster->points.size() << std::endl;
-        }
 
+        std::cout << "PCP: # of points in object " << k << " : " << cluster->points.size() << std::endl;
 
         objects.push_back(object);
     }
+
+    if(debug_){
+      object_poses_rviz.header.frame_id = cloud_tabletop_->header.frame_id;
+      object_poses_pub_.publish(object_poses_rviz);
+    }
     return true;
+}
+
+bool PointCloudProc::projectPointCloudToPlane(sensor_msgs::PointCloud2 &cloud_in,
+                                              sensor_msgs::PointCloud2 &cloud_out,
+                                              pcl::ModelCoefficientsPtr plane_coeffs) {
+
+  CloudT::Ptr cloud_in_pcl(new CloudT);
+  CloudT::Ptr cloud_out_pcl(new CloudT);
+  pcl::fromROSMsg(cloud_in, *cloud_in_pcl);
+
+  plane_proj_.setModelType(pcl::SACMODEL_PLANE);
+  plane_proj_.setModelCoefficients(plane_coeffs);
+  plane_proj_.setInputCloud(cloud_in_pcl);
+  plane_proj_.filter(*cloud_out_pcl);
+
+  pcl::toROSMsg(*cloud_out_pcl, cloud_out);
+
+  return true;
 }
 
 bool PointCloudProc::get3DPoint(int col, int row, geometry_msgs::PointStamped &point) {

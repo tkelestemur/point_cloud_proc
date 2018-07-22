@@ -12,11 +12,11 @@
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PolygonStamped.h>
+#include <geometry_msgs/PoseArray.h>
 #include <pcl_msgs/PolygonMesh.h>
 #include <point_cloud_proc/Mesh.h>
-#include <point_cloud_proc/Planes.h>
+#include <point_cloud_proc/Plane.h>
 #include <point_cloud_proc/Object.h>
-#include <point_cloud_proc/Objects.h>
 #include <point_cloud_proc/SinglePlaneSegmentation.h>
 #include <point_cloud_proc/MultiPlaneSegmentation.h>
 #include <point_cloud_proc/TabletopExtraction.h>
@@ -83,8 +83,12 @@ public:
     bool removeOutliers(CloudT::Ptr in, CloudT::Ptr out);
     bool segmentSinglePlane(point_cloud_proc::Plane& plane, char axis='z', int pass=0);
     bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes, int pass=0);
-    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects);
+    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects,
+                        bool compute_normals=false);
     bool extractTabletop();
+    bool projectPointCloudToPlane(sensor_msgs::PointCloud2& cloud_in,
+                                  sensor_msgs::PointCloud2& cloud_out,
+                                  pcl::ModelCoefficientsPtr plane_coeffs);
     bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
     bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
     bool trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msgs::PolygonMesh& mesh);
@@ -123,7 +127,7 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber point_cloud_sub_;
     ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
-
+    ros::Publisher object_poses_pub_;
     int PASS_SHELF = 1;
     int PASS_TABLE = 2;
     int PASS = 0;
