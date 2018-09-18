@@ -13,5 +13,6 @@ This package is tested on Ubuntu 16.04 with ROS Kinetic.
 
 #### TODO:
 
+- [ ] Use ROS Param server instead of YAML parsing.
 - [ ] Single plane segments also finds outliers, need to fix parameters.
 - [ ] Write documentation.

@@ -10,14 +10,14 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
 	message_generation
 	geometry_msgs
-  sensor_msgs
+  	sensor_msgs
 	std_msgs
-  pcl_msgs
-  pcl_ros
-  roscpp
-  roslib
-  rospy
-  tf
+  	pcl_msgs
+  	pcl_ros
+  	roscpp
+  	roslib
+  	rospy
+  	tf
 )
 
 find_package(Eigen3 REQUIRED)
@@ -31,11 +31,11 @@ endif()
 add_message_files(
 	DIRECTORY msg
 	FILES
-  Triangle.msg
-  Mesh.msg
+    Triangle.msg
+  	Mesh.msg
 	Object.msg
 	Objects.msg
-  Plane.msg
+  	Plane.msg
 	Planes.msg
 )
 
@@ -44,7 +44,7 @@ add_message_files(
 add_service_files(
 	DIRECTORY srv
 	FILES
-  SinglePlaneSegmentation.srv
+  	SinglePlaneSegmentation.srv
 	MultiPlaneSegmentation.srv
 	TabletopExtraction.srv
 	TabletopClustering.srv
