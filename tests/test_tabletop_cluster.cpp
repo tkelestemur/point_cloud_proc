@@ -12,9 +12,6 @@ int main(int argc, char **argv) {
   spinner.start();
   ros::Duration(1.0).sleep();
 
-  point_cloud_proc::Plane plane;
-  pcp.segmentSinglePlane(plane);
-
   std::vector<point_cloud_proc::Object> objects;
   pcp.clusterObjects(objects);
 

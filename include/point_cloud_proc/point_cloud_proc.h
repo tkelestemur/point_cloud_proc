@@ -3,6 +3,7 @@
 
 // ROS
 #include <ros/ros.h>
+#include <ros/topic.h>
 #include <ros/package.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/Image.h>
@@ -61,13 +62,13 @@
 #include <Eigen/Geometry>
 #include <yaml-cpp/yaml.h>
 
-enum AXIS{
+enum AXIS {
     XAXIS,
     YAXIS,
     ZAXIS
 };
 
-class PointCloudProc{
+class PointCloudProc {
     typedef pcl::PointXYZRGB PointT;
     typedef pcl::Normal PointNT;
     typedef pcl::PointCloud<PointT> CloudT;
@@ -75,27 +76,48 @@ class PointCloudProc{
 
 
 public:
-    PointCloudProc(ros::NodeHandle n, bool debug=false);
+    PointCloudProc(ros::NodeHandle n, bool debug = false);
+
     void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
 
     bool transformPointCloud();
+
     bool filterPointCloud();
+
     bool removeOutliers(CloudT::Ptr in, CloudT::Ptr out);
-    bool segmentSinglePlane(point_cloud_proc::Plane& plane, char axis='z');
-    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane>& planes);
-    bool clusterObjects(std::vector<point_cloud_proc::Object>& objects,
-                        bool compute_normals=false);
+
+    bool segmentSinglePlane(point_cloud_proc::Plane &plane, char axis = 'z');
+
+    bool segmentMultiplePlane(std::vector<point_cloud_proc::Plane> &planes);
+
     bool extractTabletop();
-    bool projectPointCloudToPlane(sensor_msgs::PointCloud2& cloud_in,
-                                  sensor_msgs::PointCloud2& cloud_out,
+
+    bool clusterObjects(std::vector<point_cloud_proc::Object> &objects,
+            bool compute_normals = false,
+            bool project = false);
+
+    bool projectPointCloudToPlane(sensor_msgs::PointCloud2 &cloud_in,
+                                  sensor_msgs::PointCloud2 &cloud_out,
                                   pcl::ModelCoefficientsPtr plane_coeffs);
-    bool get3DPoint(int col, int row, geometry_msgs::PointStamped& point);
-    bool getObjectFromBBox(int *bbox, point_cloud_proc::Object& object);
-    bool trianglePointCloud(sensor_msgs::PointCloud2& cloud, pcl_msgs::PolygonMesh& mesh);
-    void getRemainingCloud(sensor_msgs::PointCloud2& cloud);
-    void getFilteredCloud(sensor_msgs::PointCloud2& cloud);
+
+    bool get3DPoint(int col, int row, geometry_msgs::PointStamped &point);
+
+    bool getObjectFromBBox(int *bbox, point_cloud_proc::Object &object);
+
+    bool getObjectFromContour(const std::vector<int> &contour_x,
+            const std::vector<int> &contour_y,
+            point_cloud_proc::Object &object);
+
+    bool trianglePointCloud(sensor_msgs::PointCloud2 &cloud, pcl_msgs::PolygonMesh &mesh);
+
+    void getRemainingCloud(sensor_msgs::PointCloud2 &cloud);
+
+    void getFilteredCloud(sensor_msgs::PointCloud2 &cloud);
+
     sensor_msgs::PointCloud2::Ptr getTabletopCloud();
+
     CloudT::Ptr getFilteredCloud();
+
     pcl::PointIndices::Ptr getTabletopIndicies();
 
 
@@ -112,6 +134,7 @@ private:
     pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3_;
 
     bool debug_;
+    bool pc_received_ = false;
     int k_search_, min_plane_size_, max_iter_, min_cluster_size_, max_cluster_size_, min_neighbors_;
     float cluster_tol_, leaf_size_, eps_angle_, single_dist_thresh_, multi_dist_thresh_, radius_search_;
 

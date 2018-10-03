@@ -115,6 +115,7 @@ target_link_libraries(test_multi_plane point_cloud_proc ${catkin_LIBRARIES})
 add_executable(test_tabletop_cluster tests/test_tabletop_cluster.cpp)
 target_link_libraries(test_tabletop_cluster point_cloud_proc ${catkin_LIBRARIES})
 
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
