@@ -52,6 +52,7 @@
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/moment_of_inertia_estimation.h>
 #include <pcl/surface/gp3.h>
+#include <pcl/surface/poisson.h>
 //#include <pcl/surface/vtk_smoothing/vtk_mesh_quadric_decimation.h>
 
 // Other
@@ -107,6 +108,8 @@ public:
     bool getObjectFromContour(const std::vector<int> &contour_x,
             const std::vector<int> &contour_y,
             point_cloud_proc::Object &object);
+
+    bool generateMeshFromPointCloud(sensor_msgs::PointCloud2 &cloud, pcl_msgs::PolygonMesh &mesh);
 
     bool trianglePointCloud(sensor_msgs::PointCloud2 &cloud, pcl_msgs::PolygonMesh &mesh);
 

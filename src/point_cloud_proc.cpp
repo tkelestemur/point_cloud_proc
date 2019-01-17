@@ -697,14 +697,14 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
 
     }
 
-    removeOutliers(object_cloud, object_cloud_filtered);
-    if (object_cloud_filtered->empty()) {
-        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-        return false;
-    }
+//    removeOutliers(object_cloud, object_cloud_filtered);
+//    if (object_cloud_filtered->empty()) {
+//        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+//        return false;
+//    }
 
     Eigen::Vector4f min_vals, max_vals;
-    pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
+    pcl::getMinMax3D(*object_cloud, min_vals, max_vals);
 
     object.min.x = min_vals[0];
     object.min.y = min_vals[1];
@@ -714,16 +714,77 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     object.max.z = max_vals[2];
 
     Eigen::Vector4f center;
-    pcl::compute3DCentroid(*object_cloud_filtered, center);
+    pcl::compute3DCentroid(*object_cloud, center);
     object.center.x = center[0];
     object.center.y = center[1];
     object.center.z = center[2];
 
     sensor_msgs::PointCloud2 cloud_ros;
-    pcl::toROSMsg(*object_cloud_filtered, cloud_ros);
+    pcl::toROSMsg(*object_cloud, cloud_ros);
 
     debug_cloud_pub_.publish(cloud_ros);
     return true;
+}
+
+bool PointCloudProc::generateMeshFromPointCloud(sensor_msgs::PointCloud2 &cloud, pcl_msgs::PolygonMesh &mesh) {
+
+    pcl::NormalEstimationOMP<pcl::PointXYZ, PointNT> ne(6);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_filtered(new pcl::PointCloud<pcl::PointXYZ>);
+
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree1(new pcl::search::KdTree<pcl::PointXYZ>());
+    pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
+
+
+    pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals(new pcl::PointCloud<pcl::PointNormal>);
+
+    pcl::fromROSMsg(cloud, *cloud_in);
+
+    std::vector<int> indicies;
+    pcl::removeNaNFromPointCloud(*cloud_in, *cloud_in, indicies);
+
+//    pcl::VoxelGrid<pcl::PointXYZ> vg;
+//    vg.setInputCloud(cloud_in);
+//    vg.setLeafSize (0.03f, 0.03f, 0.03f);
+//    vg.filter(*cloud_in_filtered);
+
+
+    tree1->setInputCloud(cloud_in);
+    ne.setInputCloud(cloud_in);
+    ne.setSearchMethod(tree1);
+    ne.setKSearch(40);
+//    ne.setRadiusSearch(0.01);
+    ne.compute(*normals);
+
+    pcl::concatenateFields(*cloud_in, *normals, *cloud_normals);
+
+//    for(size_t i = 0; i < cloud_normals->size(); ++i){
+//        cloud_normals->points[i].normal_x *= -1;
+//        cloud_normals->points[i].normal_y *= -1;
+//        cloud_normals->points[i].normal_z *= -1;
+//    }
+
+
+    pcl::PolygonMesh pcl_mesh;
+    pcl::Poisson<pcl::PointNormal> ps;
+    tree2->setInputCloud(cloud_normals);
+    ps.setDepth (8);
+    ps.setSolverDivide (8);
+    ps.setIsoDivide (8);
+    ps.setPointWeight (4.0f);
+    ps.setInputCloud(cloud_normals);
+    ps.setSearchMethod(tree2);
+    ps.reconstruct(pcl_mesh);
+
+
+
+    pcl_conversions::fromPCL(pcl_mesh, mesh);
+
+    std::cout << "PCP: # of triangles : " << pcl_mesh.polygons.size() << std::endl;
+
+    return true;
+
 }
 
 bool PointCloudProc::trianglePointCloud(sensor_msgs::PointCloud2 &cloud, pcl_msgs::PolygonMesh &mesh) {
@@ -807,7 +868,7 @@ void PointCloudProc::getFilteredCloud(sensor_msgs::PointCloud2 &cloud) {
         std::cout << "PCP: couldn't filter point cloud!" << std::endl;
     }
 
-    pcl::toROSMsg(*cloud_transformed_, cloud);
+    pcl::toROSMsg(*cloud_filtered_, cloud);
 }
 
 sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
