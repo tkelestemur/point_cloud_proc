@@ -1,12 +1,13 @@
 #include <point_cloud_proc/point_cloud_proc.h>
 
-PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug) :
+PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug, std::string config) :
         nh_(n), debug_(debug), cloud_transformed_(new CloudT), cloud_filtered_(new CloudT),
         cloud_hull_(new CloudT), cloud_tabletop_(new CloudT) {
 
 
     std::string pkg_path = ros::package::getPath("point_cloud_proc");
-    std::string config_path = pkg_path + "/config/default_config.yaml";
+    std::string config_path = pkg_path + "/config/" + config;
+    std::cout << "PCP: config file : " + config_path << std::endl;
 
     YAML::Node parameters = YAML::LoadFile(config_path);
 

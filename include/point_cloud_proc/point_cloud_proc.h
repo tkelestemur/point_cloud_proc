@@ -77,7 +77,7 @@ class PointCloudProc {
 
 
 public:
-    PointCloudProc(ros::NodeHandle n, bool debug = false);
+    PointCloudProc(ros::NodeHandle n, bool debug = false, std::string config = "default.yaml");
 
     void pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg);
 
