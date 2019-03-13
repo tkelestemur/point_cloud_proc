@@ -546,6 +546,16 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
                 object.normals.push_back(normal);
             }
         }
+        // Get max segment
+        PointT pmin, pmax;
+        pcl::getMaxSegment(*cluster, pmin, pmax);
+        object.pmin.x = pmin.x;
+        object.pmin.y = pmin.y;
+        object.pmin.z = pmin.z;
+
+        object.pmax.x = pmax.x;
+        object.pmax.y = pmax.y;
+        object.pmax.z = pmax.z;
 
         // Get object center
         object.center.x = mean_values[0];
