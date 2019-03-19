@@ -7,7 +7,7 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug, std::string config
     std::string config_path;
     if(config.empty()){
       std::string pkg_path = ros::package::getPath("point_cloud_proc");
-      config_path = pkg_path + "/config/" + config;
+      config_path = pkg_path + "/config/default.yaml";
       std::cout << "PCP: config file : " + config_path << std::endl;
     }else{
       config_path = config;
@@ -494,30 +494,33 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
         extract_.filter(*cluster);
 
         // Compute PCA to find centeroid and orientation
-        Eigen::Matrix3f eigen_vectors;
-        Eigen::Vector3f eigen_values;
-        Eigen::Vector4f mean_values;
-        if (project) {
-            plane_proj_.setModelType(pcl::SACMODEL_PLANE);
-            plane_proj_.setModelCoefficients(coefficients);
-            plane_proj_.setInputCloud(cluster);
-            plane_proj_.filter(*cluster_projected);
-
-            pca_.setInputCloud(cluster_projected);
-            eigen_vectors = pca_.getEigenVectors();
-
-            eigen_values = pca_.getEigenValues();
-            pca_.setInputCloud(cluster);
-            mean_values = pca_.getMean();
-
-            std::cout << "PCP: eigen vectors: " << std::endl << eigen_vectors << std::endl;
-
-        } else {
-            pca_.setInputCloud(cluster);
-            eigen_vectors = pca_.getEigenVectors();
-            eigen_values = pca_.getEigenValues();
-            mean_values = pca_.getMean();
-        }
+//        Eigen::Matrix3f eigen_vectors;
+//        Eigen::Vector3f eigen_values;
+//        Eigen::Vector4f mean_values;
+//        if (project) {
+//            plane_proj_.setModelType(pcl::SACMODEL_PLANE);
+//            plane_proj_.setModelCoefficients(coefficients);
+//            plane_proj_.setInputCloud(cluster);
+//            plane_proj_.filter(*cluster_projected);
+//
+//            pca_.setInputCloud(cluster_projected);
+//            eigen_vectors = pca_.getEigenVectors();
+//
+//            eigen_values = pca_.getEigenValues();
+//            pca_.setInputCloud(cluster);
+//            mean_values = pca_.getMean();
+//
+//            std::cout << "PCP: eigen vectors: " << std::endl << eigen_vectors << std::endl;
+//
+//        } else {
+//            pca_.setInputCloud(cluster);
+//            eigen_vectors = pca_.getEigenVectors();
+//            eigen_values = pca_.getEigenValues();
+//            mean_values = pca_.getMean();
+//        }
+//
+//        Eigen::Quaternionf quat(eigen_vectors);
+//        quat.normalize();
 
 
         if (compute_normals) {
@@ -528,6 +531,27 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
             ne.setKSearch(k_search_);
             ne.compute(*cluster_normals);
         }
+
+        // Find position
+        Eigen::Vector4f center;
+        pcl::compute3DCentroid(*cluster, center);
+
+        // Find orientetions
+        // Get max segment
+        PointT pmin, pmax;
+        pcl::getMaxSegment(*cluster, pmin, pmax);
+//        double y_axis_norm = std::sqrt(std::pow(pmin.x-pmax.x, 2) + std::pow(pmin.y-pmax.y, 2));
+        Eigen::Vector3d y_axis (pmin.x-pmax.x, pmin.y-pmax.y, 0.0);
+        y_axis.normalize();
+        Eigen::Vector3d z_axis (0.0, 0.0, 1.0);
+        Eigen::Vector3d x_axis = y_axis.cross(x_axis);
+
+        Eigen::Matrix3d rot;
+        rot << x_axis(0), y_axis(0), z_axis(0),
+               x_axis(1), y_axis(1), z_axis(1),
+               x_axis(2), y_axis(2), z_axis(1);
+
+        Eigen::Quaterniond q(rot);
 
         point_cloud_proc::Object object;
         // Get object point cloud
@@ -546,9 +570,8 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
                 object.normals.push_back(normal);
             }
         }
-        // Get max segment
-        PointT pmin, pmax;
-        pcl::getMaxSegment(*cluster, pmin, pmax);
+
+
         object.pmin.x = pmin.x;
         object.pmin.y = pmin.y;
         object.pmin.z = pmin.z;
@@ -558,21 +581,20 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
         object.pmax.z = pmax.z;
 
         // Get object center
-        object.center.x = mean_values[0];
-        object.center.y = mean_values[1];
-        object.center.z = mean_values[2];
+        object.center.x = center[0];
+        object.center.y = center[1];
+        object.center.z = center[2];
 
         // geometry_msgs::Pose cluster_pose;
-        object.pose.position.x = mean_values[0];
-        object.pose.position.y = mean_values[1];
-        object.pose.position.z = mean_values[2];
-        Eigen::Quaternionf quat(eigen_vectors);
-        quat.normalize();
+        object.pose.position.x = center[0];
+        object.pose.position.y = center[1];
+        object.pose.position.z = center[2];
 
-        object.pose.orientation.x = quat.x();
-        object.pose.orientation.y = quat.y();
-        object.pose.orientation.z = quat.z();
-        object.pose.orientation.w = quat.w();
+
+        object.pose.orientation.x = q.x();
+        object.pose.orientation.y = q.y();
+        object.pose.orientation.z = q.z();
+        object.pose.orientation.w = q.w();
 
         // Get min max points coords
         Eigen::Vector4f min_vals, max_vals;

@@ -1,7 +1,7 @@
 point_cloud_topic: "/hsrb/head_rgbd_sensor/depth_registered/rectified_points"
 fixed_frame: "base_link"
 filters:
-  pass_limits: [0.0, 1.5, -1.5, 1.5, -0.1, 2.0]
+  pass_limits: [0.0, 1.5, -1.2, 1.2, -0.1, 2.0]
   prism_limits: [-0.25, -0.02]
   leaf_size : 0.01
   outlier_min_neighbors: 70
