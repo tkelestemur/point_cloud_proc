@@ -122,9 +122,9 @@ bool PointCloudProc::filterPointCloud() {
     }
 
     // Downsample point cloud
-//   vg_.setInputCloud (cloud_filtered_);
-//   vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
-//   vg_.filter (*cloud_filtered_);
+  vg_.setInputCloud (cloud_filtered_);
+  vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
+  vg_.filter (*cloud_filtered_);
 
     return true;
 }
