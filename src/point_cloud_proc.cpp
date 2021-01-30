@@ -122,9 +122,9 @@ bool PointCloudProc::filterPointCloud() {
     }
 
     // Downsample point cloud
-//  vg_.setInputCloud (cloud_filtered_);
-//  vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
-//  vg_.filter (*cloud_filtered_);
+    vg_.setInputCloud (cloud_filtered_);
+    vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
+    vg_.filter (*cloud_filtered_);
 
     return true;
 }
@@ -683,11 +683,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 
     }
 
-    removeOutliers(object_cloud, object_cloud_filtered);
-    if (object_cloud_filtered->empty()) {
-        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-        return false;
-    }
+    // removeOutliers(object_cloud, object_cloud_filtered);
+    // if (object_cloud_filtered->empty()) {
+    //     std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+    //     return false;
+    // }
 
     Eigen::Vector4f min_vals, max_vals;
 
@@ -735,14 +735,14 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
 
     }
 
-//    removeOutliers(object_cloud, object_cloud_filtered);
-//    if (object_cloud_filtered->empty()) {
-//        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-//        return false;
-//    }
+   removeOutliers(object_cloud, object_cloud_filtered);
+   if (object_cloud->empty()) {
+       std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+       return false;
+   }
 
     Eigen::Vector4f min_vals, max_vals;
-    pcl::getMinMax3D(*object_cloud, min_vals, max_vals);
+    pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
 
     object.min.x = min_vals[0];
     object.min.y = min_vals[1];
@@ -752,13 +752,50 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     object.max.z = max_vals[2];
 
     Eigen::Vector4f center;
-    pcl::compute3DCentroid(*object_cloud, center);
+    pcl::compute3DCentroid(*object_cloud_filtered, center);
     object.center.x = center[0];
     object.center.y = center[1];
     object.center.z = center[2];
 
+    object.pose.position.x = center[0];
+    object.pose.position.y = center[1];
+    object.pose.position.z = center[2];
+
+    Eigen::Vector3d x, y, z;
+	z << 0.0, 0.0, 1.0;
+
+	double length_x = (object.max.x - object.min.x) * (object.max.x - object.min.x);
+	double length_y = (object.max.y - object.min.y) * (object.max.y - object.min.y);
+    Eigen::Vector3d max_point, min_point;
+	max_point << object.max.x, object.max.y, 0.0;
+	min_point << object.min.x, object.min.y, 0.0;
+
+
+	 y = (max_point - min_point) / std::sqrt((length_x + length_y));
+	 x = y.cross(-z);
+
+
+    tf::Matrix3x3 rot(x(0), y(0), z(0),
+                      x(1), y(1), z(1),
+                      x(2), y(2), z(2));
+
+    tf::Quaternion q;
+    rot.getRotation(q);
+    q = q.normalize();
+    object.pose.orientation.x = q.x();
+    object.pose.orientation.y = q.y();
+    object.pose.orientation.z = q.z();
+    object.pose.orientation.w = q.w();
+
     sensor_msgs::PointCloud2 cloud_ros;
-    pcl::toROSMsg(*object_cloud, cloud_ros);
+    pcl::toROSMsg(*object_cloud_filtered, cloud_ros);
+
+    if (debug_) {
+        geometry_msgs::PoseArray object_poses_rviz;
+        object_poses_rviz.poses.push_back(object.pose);
+        object_poses_rviz.header.frame_id = cloud_ros.header.frame_id;
+        object_poses_pub_.publish(object_poses_rviz);
+    }
 
     debug_cloud_pub_.publish(cloud_ros);
     return true;
@@ -916,11 +953,11 @@ sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
     return cloud;
 }
 
-PointCloudProc::CloudT::Ptr PointCloudProc::getFilteredCloud() {
-//  sensor_msgs::PointCloud2::Ptr filtered_cloud;
-//  pcl::toROSMsg(*cloud_filtered_, *filtered_cloud);
-
-    return cloud_filtered_;
+sensor_msgs::PointCloud2::Ptr PointCloudProc::getFilteredCloud() {
+    sensor_msgs::PointCloud2::Ptr filtered_cloud;
+    pcl::toROSMsg(*cloud_filtered_, *filtered_cloud);
+    // // debug_cloud_pub_.publish(filtered_cloud);
+    return filtered_cloud;
 }
 
 pcl::PointIndices::Ptr PointCloudProc::getTabletopIndicies() {

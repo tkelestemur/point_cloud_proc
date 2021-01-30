@@ -119,7 +119,7 @@ public:
 
     sensor_msgs::PointCloud2::Ptr getTabletopCloud();
 
-    CloudT::Ptr getFilteredCloud();
+    sensor_msgs::PointCloud2::Ptr getFilteredCloud();
 
     pcl::PointIndices::Ptr getTabletopIndicies();
 
