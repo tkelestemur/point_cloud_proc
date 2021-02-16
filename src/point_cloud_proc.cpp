@@ -114,7 +114,6 @@ bool PointCloudProc::filterPointCloud() {
     pass_.setFilterLimits(pass_limits_[4], pass_limits_[5]);
     pass_.filter(*cloud_filtered_);
 
-
     std::cout << "PCP: point cloud is filtered!" << std::endl;
     if (cloud_filtered_->points.size() == 0) {
         std::cout << "PCP: point cloud is empty after filtering!" << std::endl;
@@ -770,10 +769,9 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
 	max_point << object.max.x, object.max.y, 0.0;
 	min_point << object.min.x, object.min.y, 0.0;
 
-
-	 y = (max_point - min_point) / std::sqrt((length_x + length_y));
-	 x = y.cross(-z);
-
+    y = (max_point - min_point) / std::sqrt((length_x + length_y));
+    x = y.cross(z);
+    // x = z.cross(y);
 
     tf::Matrix3x3 rot(x(0), y(0), z(0),
                       x(1), y(1), z(1),
@@ -781,7 +779,7 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
 
     tf::Quaternion q;
     rot.getRotation(q);
-    q = q.normalize();
+    // q = q.normalize();
     object.pose.orientation.x = q.x();
     object.pose.orientation.y = q.y();
     object.pose.orientation.z = q.z();

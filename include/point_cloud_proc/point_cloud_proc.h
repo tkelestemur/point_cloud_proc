@@ -38,6 +38,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/surface/convex_hull.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -133,6 +134,7 @@ private:
     pcl::ExtractPolygonalPrismData<PointT> prism_;
     pcl::EuclideanClusterExtraction<PointT> ec_;
     pcl::RadiusOutlierRemoval<PointT> outrem_;
+    pcl::StatisticalOutlierRemoval<PointT> sor_;
     pcl::ProjectInliers<PointT> plane_proj_;
     pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3_;
 
