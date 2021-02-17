@@ -12,6 +12,7 @@
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Point32.h>
+#include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <pcl_msgs/PolygonMesh.h>
@@ -156,6 +157,7 @@ private:
     ros::Subscriber point_cloud_sub_;
     ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
     ros::Publisher object_poses_pub_;
+    ros::Publisher point_pub_;
 
 };
 
