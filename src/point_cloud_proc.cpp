@@ -721,13 +721,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, const std::vector<int> &contour_y,
                                           point_cloud_proc::Object &object) {
 
-    ROS_INFO("TEST0");
     if (!transformPointCloud()) {
         std::cout << "PCP: couldn't transform point cloud!" << std::endl;
         return false;
     }
 
-    ROS_INFO("TEST1");
 
     pcl_conversions::fromPCL(cloud_transformed_->header, object.header);
 
