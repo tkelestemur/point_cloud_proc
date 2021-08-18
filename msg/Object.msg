@@ -1,5 +1,7 @@
 Header header
 
+string name
+
 geometry_msgs/Point center
 
 geometry_msgs/Pose pose

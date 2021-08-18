@@ -13,6 +13,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Point32.h>
+#include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <pcl_msgs/PolygonMesh.h>
@@ -39,6 +40,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/surface/convex_hull.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
@@ -120,7 +122,7 @@ public:
 
     sensor_msgs::PointCloud2::Ptr getTabletopCloud();
 
-    CloudT::Ptr getFilteredCloud();
+    sensor_msgs::PointCloud2::Ptr getFilteredCloud();
 
     pcl::PointIndices::Ptr getTabletopIndicies();
 
@@ -134,6 +136,7 @@ private:
     pcl::ExtractPolygonalPrismData<PointT> prism_;
     pcl::EuclideanClusterExtraction<PointT> ec_;
     pcl::RadiusOutlierRemoval<PointT> outrem_;
+    pcl::StatisticalOutlierRemoval<PointT> sor_;
     pcl::ProjectInliers<PointT> plane_proj_;
     pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3_;
 
@@ -155,6 +158,7 @@ private:
     ros::Subscriber point_cloud_sub_;
     ros::Publisher plane_cloud_pub_, tabletop_pub_, debug_cloud_pub_;
     ros::Publisher object_poses_pub_;
+    ros::Publisher point_pub_;
 
 };
 

@@ -45,6 +45,7 @@ PointCloudProc::PointCloudProc(ros::NodeHandle n, bool debug, std::string config
         debug_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("debug_cloud", 10);
         tabletop_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("tabletop_cloud", 10);
         object_poses_pub_ = nh_.advertise<geometry_msgs::PoseArray>("object_poses", 10);
+        point_pub_  = nh_.advertise<geometry_msgs::PointStamped>("object_points", 10);
     }
 }
 
@@ -121,7 +122,6 @@ bool PointCloudProc::filterPointCloud() {
     pass_.setFilterLimits(pass_limits_[4], pass_limits_[5]);
     pass_.filter(*cloud_filtered_);
 
-
     std::cout << "PCP: point cloud is filtered!" << std::endl;
     if (cloud_filtered_->points.size() == 0) {
         std::cout << "PCP: point cloud is empty after filtering!" << std::endl;
@@ -129,9 +129,9 @@ bool PointCloudProc::filterPointCloud() {
     }
 
     // Downsample point cloud
-//  vg_.setInputCloud (cloud_filtered_);
-//  vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
-//  vg_.filter (*cloud_filtered_);
+    vg_.setInputCloud (cloud_filtered_);
+    vg_.setLeafSize (leaf_size_, leaf_size_, leaf_size_);
+    vg_.filter (*cloud_filtered_);
 
     return true;
 }
@@ -551,7 +551,7 @@ bool PointCloudProc::clusterObjects(std::vector<point_cloud_proc::Object> &objec
         Eigen::Vector3d y_axis (pmin.x-pmax.x, pmin.y-pmax.y, 0.0);
         y_axis.normalize();
         Eigen::Vector3d z_axis (0.0, 0.0, 1.0);
-        Eigen::Vector3d x_axis = y_axis.cross(x_axis);
+        Eigen::Vector3d x_axis = y_axis.cross(z_axis);
 
         Eigen::Matrix3d rot;
         rot << x_axis(0), y_axis(0), z_axis(0),
@@ -690,11 +690,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 
     }
 
-    removeOutliers(object_cloud, object_cloud_filtered);
-    if (object_cloud_filtered->empty()) {
-        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-        return false;
-    }
+    // removeOutliers(object_cloud, object_cloud_filtered);
+    // if (object_cloud_filtered->empty()) {
+    //     std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+    //     return false;
+    // }
 
     Eigen::Vector4f min_vals, max_vals;
 
@@ -720,13 +720,14 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 
 bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, const std::vector<int> &contour_y,
                                           point_cloud_proc::Object &object) {
-
     if (!transformPointCloud()) {
         std::cout << "PCP: couldn't transform point cloud!" << std::endl;
         return false;
     }
 
-
+    if(cloud_transformed_->height == 1){
+        std::cout << "PCP: transformed cloud is not organized!" << std::endl;
+    }
     pcl_conversions::fromPCL(cloud_transformed_->header, object.header);
 
     CloudT::Ptr object_cloud(new CloudT);
@@ -743,14 +744,37 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
 
     }
 
-//    removeOutliers(object_cloud, object_cloud_filtered);
-//    if (object_cloud_filtered->empty()) {
-//        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-//        return false;
-//    }
+    CloudT::Ptr object_cloud_plane(new CloudT);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+
+    seg_.setOptimizeCoefficients(true);
+    seg_.setMaxIterations(max_iter_);
+    seg_.setModelType(pcl::SACMODEL_PLANE);
+    seg_.setMethodType(pcl::SAC_RANSAC);
+    seg_.setDistanceThreshold(single_dist_thresh_);
+    seg_.setInputCloud(object_cloud);
+    seg_.segment(*inliers, *coefficients);
+
+
+    if (inliers->indices.size() == 0) {
+        std::cout << "PCP: plane is empty!" << std::endl;
+        return false;
+    }
+
+    extract_.setInputCloud(object_cloud);
+    extract_.setNegative(false);
+    extract_.setIndices(inliers);
+    extract_.filter(*object_cloud_plane);
+
+   removeOutliers(object_cloud, object_cloud_filtered);
+   if (object_cloud->empty()) {
+       std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+       return false;
+   }
 
     Eigen::Vector4f min_vals, max_vals;
-    pcl::getMinMax3D(*object_cloud, min_vals, max_vals);
+    pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
 
     object.min.x = min_vals[0];
     object.min.y = min_vals[1];
@@ -760,13 +784,78 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     object.max.z = max_vals[2];
 
     Eigen::Vector4f center;
-    pcl::compute3DCentroid(*object_cloud, center);
+    pcl::compute3DCentroid(*object_cloud_filtered, center);
     object.center.x = center[0];
     object.center.y = center[1];
     object.center.z = center[2];
 
+    object.pose.position.x = center[0];
+    object.pose.position.y = center[1];
+    object.pose.position.z = center[2];
+
+    PointT pmin, pmax;
+    pcl::getMaxSegment(*object_cloud_plane, pmin, pmax);
+
+    object.pmax.x = pmax.x;
+    object.pmax.y = pmax.y;
+    object.pmax.z = pmax.z;
+
+    object.pmin.x = pmin.x;
+    object.pmin.y = pmin.y;
+    object.pmin.z = pmin.z;
+
+    Eigen::Vector3d x, y, z;
+	z << 0.0, 0.0, 1.0;
+
+    double max_seg_len_x = std::pow(pmax.x - pmin.x, 2);
+    double max_seg_len_y = std::pow(pmax.y - pmin.y, 2);
+    Eigen::Vector3d max_point, min_point;
+    max_point << pmax.x, pmax.y, 0.0;
+	min_point << pmin.x, pmin.y, 0.0;    
+    if (center[1] > pmax.y){
+        y = (min_point - max_point ) / std::sqrt((max_seg_len_x + max_seg_len_y));
+        
+    } else{
+        y = (max_point - min_point) / std::sqrt((max_seg_len_x + max_seg_len_y));
+    }
+
+    x = y.cross(z);
+
+    tf::Matrix3x3 rot(x(0), y(0), z(0),
+                      x(1), y(1), z(1),
+                      x(2), y(2), z(2));
+
+    tf::Quaternion q;
+    rot.getRotation(q);
+    // q = q.normalize();
+    object.pose.orientation.x = q.x();
+    object.pose.orientation.y = q.y();
+    object.pose.orientation.z = q.z();
+    object.pose.orientation.w = q.w();
+
     sensor_msgs::PointCloud2 cloud_ros;
-    pcl::toROSMsg(*object_cloud, cloud_ros);
+    pcl::toROSMsg(*object_cloud_plane, cloud_ros);
+
+    // if (debug_) {
+    //     geometry_msgs::PoseArray object_poses_rviz;
+    //     object_poses_rviz.poses.push_back(object.pose);
+    //     object_poses_rviz.header.frame_id = cloud_ros.header.frame_id;
+    //     object_poses_pub_.publish(object_poses_rviz);
+    // }
+
+    geometry_msgs::PointStamped point_max, point_min;
+    point_max.header.frame_id = fixed_frame_;
+    
+    point_max.point.x = object.pmax.x;
+    point_max.point.y = object.pmax.y;
+    point_max.point.z = center[2];
+    point_pub_.publish(point_max);
+
+    point_min.header.frame_id = fixed_frame_;
+    point_min.point.x = object.pmin.x;
+    point_min.point.y = object.pmin.y;
+    point_min.point.z = center[2];
+    point_pub_.publish(point_min);
 
     debug_cloud_pub_.publish(cloud_ros);
     return true;
@@ -924,11 +1013,11 @@ sensor_msgs::PointCloud2::Ptr PointCloudProc::getTabletopCloud() {
     return cloud;
 }
 
-PointCloudProc::CloudT::Ptr PointCloudProc::getFilteredCloud() {
-//  sensor_msgs::PointCloud2::Ptr filtered_cloud;
-//  pcl::toROSMsg(*cloud_filtered_, *filtered_cloud);
-
-    return cloud_filtered_;
+sensor_msgs::PointCloud2::Ptr PointCloudProc::getFilteredCloud() {
+    sensor_msgs::PointCloud2::Ptr filtered_cloud;
+    pcl::toROSMsg(*cloud_filtered_, *filtered_cloud);
+    // // debug_cloud_pub_.publish(filtered_cloud);
+    return filtered_cloud;
 }
 
 pcl::PointIndices::Ptr PointCloudProc::getTabletopIndicies() {
