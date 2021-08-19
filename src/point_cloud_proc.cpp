@@ -690,11 +690,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 
     }
 
-    // removeOutliers(object_cloud, object_cloud_filtered);
-    // if (object_cloud_filtered->empty()) {
-    //     std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-    //     return false;
-    // }
+    removeOutliers(object_cloud, object_cloud_filtered);
+    if (object_cloud_filtered->empty()) {
+        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+        return false;
+    }
 
     Eigen::Vector4f min_vals, max_vals;
 
@@ -767,11 +767,20 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     extract_.setIndices(inliers);
     extract_.filter(*object_cloud_plane);
 
-   removeOutliers(object_cloud, object_cloud_filtered);
-   if (object_cloud->empty()) {
-       std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-       return false;
-   }
+
+    // If this one keeps filtering all pointclouds, try adjusting the filter parameter in 
+    // config file
+    removeOutliers(object_cloud, object_cloud_filtered);
+    
+    sensor_msgs::PointCloud2 cloud_ros;
+    pcl::toROSMsg(*object_cloud_filtered, cloud_ros);
+    debug_cloud_pub_.publish(cloud_ros);
+
+    if (object_cloud_filtered->empty()) {
+        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+        return false;
+    }
+
 
     Eigen::Vector4f min_vals, max_vals;
     pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
@@ -833,8 +842,6 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     object.pose.orientation.z = q.z();
     object.pose.orientation.w = q.w();
 
-    sensor_msgs::PointCloud2 cloud_ros;
-    pcl::toROSMsg(*object_cloud_plane, cloud_ros);
 
     // if (debug_) {
     //     geometry_msgs::PoseArray object_poses_rviz;
@@ -857,7 +864,6 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     point_min.point.z = center[2];
     point_pub_.publish(point_min);
 
-    debug_cloud_pub_.publish(cloud_ros);
     return true;
 }
 
