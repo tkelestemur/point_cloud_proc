@@ -17,7 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
   	roscpp
   	roslib
   	rospy
-  	tf
+	tf2
+	tf2_ros
 )
 
 find_package(Eigen3 REQUIRED)
@@ -75,7 +76,7 @@ generate_messages(DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES point_cloud_proc
-  CATKIN_DEPENDS message_runtime geometry_msgs std_msgs pcl_ros roscpp rospy sensor_msgs tf
+  CATKIN_DEPENDS message_runtime geometry_msgs std_msgs pcl_ros roscpp rospy sensor_msgs tf2 tf2_ros
 # DEPENDS PCL
 )
 

@@ -58,39 +58,46 @@ void PointCloudProc::pointCloudCb(const sensor_msgs::PointCloud2ConstPtr &msg) {
 
 
 bool PointCloudProc::transformPointCloud() {
-    boost::mutex::scoped_lock lock(pc_mutex_);
-
-    cloud_transformed_->clear();
-
     while (ros::ok()){
         if(pc_received_)
             break;
         else
             ros::Duration(0.1).sleep();
+            ROS_INFO("Waiting for point cloud");
     }
 
-    tf::TransformListener listener;
+    boost::mutex::scoped_lock lock(pc_mutex_);
+
+    cloud_transformed_->clear();
+
+    tf2_ros::Buffer tfBuffer;
+    tf2_ros::TransformListener listener(tfBuffer);
     std::string target_frame = cloud_raw_ros_.header.frame_id;
 
-    listener.waitForTransform(fixed_frame_, target_frame, ros::Time(0), ros::Duration(2.0));
-    tf::StampedTransform transform;
-    tf::Transform cloud_transform;
+    tfBuffer.canTransform(fixed_frame_, target_frame, ros::Time(0), ros::Duration(2.0));
+    // geometry_msgs::TransformStamped transformStamped;
+    // tf2::Transform cloud_transform;
 
     try {
-        listener.lookupTransform(fixed_frame_, target_frame, ros::Time(0), transform);
-        cloud_transform.setOrigin(transform.getOrigin());
-        cloud_transform.setRotation(transform.getRotation());
+        // transformStamped = tfBuffer.lookupTransform(fixed_frame_, target_frame, ros::Time(0));
+        // tf2::Stamped<tf2::Transform> transform;
+        // tf2::fromMsg(transformStamped, transform);
+        // cloud_transform.setOrigin(transform.getOrigin());
+        // cloud_transform.setRotation(transform.getRotation());
 
-        sensor_msgs::PointCloud2 cloud_transformed;
-        pcl_ros::transformPointCloud(fixed_frame_, cloud_transform, cloud_raw_ros_, cloud_transformed);
+        CloudT cloud_in;
+        auto time = ros::Time(0);
+        tfBuffer.canTransform(fixed_frame_, target_frame, time, ros::Duration(2.0));
+        pcl::fromROSMsg(cloud_raw_ros_, cloud_in);
+        pcl_ros::transformPointCloud(fixed_frame_, time, cloud_in, target_frame, *cloud_transformed_, tfBuffer);
 
-        pcl::fromROSMsg(cloud_transformed, *cloud_transformed_);
+        // pcl::fromROSMsg(cloud_transformed, *cloud_transformed_);
 
         std::cout << "PCP: point cloud is transformed!" << std::endl;
         return true;
 
     }
-    catch (tf::TransformException ex) {
+    catch (tf2::TransformException ex) {
         ROS_ERROR("%s", ex.what());
         return false;
     }
@@ -683,11 +690,11 @@ bool PointCloudProc::getObjectFromBBox(int *bbox, point_cloud_proc::Object &obje
 
     }
 
-    // removeOutliers(object_cloud, object_cloud_filtered);
-    // if (object_cloud_filtered->empty()) {
-    //     std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-    //     return false;
-    // }
+    removeOutliers(object_cloud, object_cloud_filtered);
+    if (object_cloud_filtered->empty()) {
+        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+        return false;
+    }
 
     Eigen::Vector4f min_vals, max_vals;
 
@@ -760,11 +767,20 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     extract_.setIndices(inliers);
     extract_.filter(*object_cloud_plane);
 
-   removeOutliers(object_cloud, object_cloud_filtered);
-   if (object_cloud->empty()) {
-       std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
-       return false;
-   }
+
+    // If this one keeps filtering all pointclouds, try adjusting the filter parameter in 
+    // config file
+    removeOutliers(object_cloud, object_cloud_filtered);
+    
+    sensor_msgs::PointCloud2 cloud_ros;
+    pcl::toROSMsg(*object_cloud_filtered, cloud_ros);
+    debug_cloud_pub_.publish(cloud_ros);
+
+    if (object_cloud_filtered->empty()) {
+        std::cout << "PCP: object cloud is empty after removing outliers!" << std::endl;
+        return false;
+    }
+
 
     Eigen::Vector4f min_vals, max_vals;
     pcl::getMinMax3D(*object_cloud_filtered, min_vals, max_vals);
@@ -826,8 +842,6 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     object.pose.orientation.z = q.z();
     object.pose.orientation.w = q.w();
 
-    sensor_msgs::PointCloud2 cloud_ros;
-    pcl::toROSMsg(*object_cloud_plane, cloud_ros);
 
     // if (debug_) {
     //     geometry_msgs::PoseArray object_poses_rviz;
@@ -850,7 +864,6 @@ bool PointCloudProc::getObjectFromContour(const std::vector<int> &contour_x, con
     point_min.point.z = center[2];
     point_pub_.publish(point_min);
 
-    debug_cloud_pub_.publish(cloud_ros);
     return true;
 }
 
